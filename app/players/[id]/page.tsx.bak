@@ -1,0 +1,454 @@
+"use client"
+
+import { useParams, useRouter } from "next/navigation"
+import { useData } from "@/hooks/use-data"
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import Link from "next/link"
+import { 
+  ArrowLeft, 
+  User, 
+  Building2, 
+  Calendar, 
+  MapPin, 
+  Award, 
+  Shield, 
+  Mail, 
+  Clock, 
+  Cake,
+  User2,
+  UserRound,
+  Globe,
+  ChartBar
+} from "lucide-react"
+import { useState } from "react"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import { toast } from "@/components/ui/use-toast"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Badge } from "@/components/ui/badge"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { format } from "date-fns"
+import { ru } from "date-fns/locale"
+import { PlayerStatistics } from "./components/player-statistics"
+
+// Интерфейс пользователя
+interface UserData {
+  id: string
+  name?: string
+  email?: string
+  image?: string
+  surname?: string
+  nickname?: string
+  country?: string
+  bio?: string
+  gender?: string
+  birthday?: string | Date
+  isTournamentJudge?: boolean
+  isSideJudge?: boolean
+  clubId?: number
+  clubName?: string
+  createdAt?: string
+  updatedAt?: string
+  role?: string
+}
+
+interface GameStats {
+  totalGames?: number
+  wins?: number
+  losses?: number
+  draws?: number
+}
+
+export default function PlayerDetailPage() {
+  const params = useParams()
+  const router = useRouter()
+  const { data, isLoading, error } = useData<any>(`/api/users/players/${params.id}`)
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
+
+  const handleDelete = async () => {
+    try {
+      setIsDeleting(true)
+      
+      // Переход на профиль после диалога (фактическое удаление не реализовано)
+      toast({
+        title: "Действие не поддерживается",
+        description: "Удаление профилей пользователей в данный момент не поддерживается.",
+        variant: "destructive",
+      })
+      
+      // Закрываем диалог
+      setShowDeleteDialog(false)
+    } catch (error) {
+      console.error("Ошибка при попытке удаления пользователя:", error)
+      toast({
+        title: "Ошибка",
+        description: "Не удалось выполнить действие с профилем пользователя.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsDeleting(false)
+    }
+  }
+
+  // Форматирование даты в российском формате
+  const formatDate = (dateString?: string | Date) => {
+    if (!dateString) return "Не указано"
+    
+    try {
+      const date = new Date(dateString)
+      return format(date, 'dd MMMM yyyy', { locale: ru })
+    } catch (e) {
+      return "Некорректная дата"
+    }
+  }
+
+  // Получение инициалов пользователя для аватара
+  const getUserInitials = (user?: UserData) => {
+    if (!user) return ""
+    
+    const initials = []
+    if (user.name && user.name[0]) initials.push(user.name[0])
+    if (user.surname && user.surname[0]) initials.push(user.surname[0])
+    
+    return initials.join("")
+  }
+
+  // Отображение гендера пользователя
+  const getGenderDisplay = (gender?: string) => {
+    switch (gender) {
+      case "male": return "Мужской"
+      case "female": return "Женский"
+      case "other": return "Другой"
+      default: return "Не указан"
+    }
+  }
+
+  // Иконка пола в зависимости от гендера
+  const getGenderIcon = (gender?: string) => {
+    switch (gender) {
+      case "male": return <UserRound className="h-4 w-4 mr-2" />
+      case "female": return <User2 className="h-4 w-4 mr-2" />
+      default: return null
+    }
+  }
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-background">
+        <main className="container py-6">
+          <div className="animate-pulse space-y-4">
+            <div className="h-8 w-64 bg-muted rounded"></div>
+            <div className="h-64 bg-muted rounded-lg"></div>
+          </div>
+        </main>
+      </div>
+    )
+  }
+
+  if (error || !data || !data.user) {
+    return (
+      <div className="min-h-screen bg-background">
+        <main className="container py-6">
+          <div className="text-center py-10">
+            <h2 className="text-xl font-semibold mb-2">Ошибка загрузки данных пользователя</h2>
+            <p className="text-red-500 mb-6">{error?.message || "Пользователь не найден"}</p>
+            <Link href="/players">
+              <Button>Вернуться к списку игроков</Button>
+            </Link>
+          </div>
+        </main>
+      </div>
+    )
+  }
+
+  const user = data.user as UserData
+  const gamesStats = data.gamesStats as GameStats
+
+  return (
+    <div className="min-h-screen bg-background">
+      <main className="container py-6 space-y-6">
+        <div className="flex justify-between items-center">
+          <div className="flex items-center">
+            <Link href="/players">
+              <Button variant="ghost" size="sm">
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                Назад к списку игроков
+              </Button>
+            </Link>
+            <h1 className="text-3xl font-bold ml-4">
+              {user.name} {user.surname}
+            </h1>
+            {user.nickname && (
+              <Badge variant="secondary" className="ml-3 text-md">
+                @{user.nickname}
+              </Badge>
+            )}
+          </div>
+          <div className="flex space-x-2">
+            <Link href="/profile">
+              <Button variant="outline">
+                <User className="mr-2 h-4 w-4" />
+                Профиль
+              </Button>
+            </Link>
+          </div>
+        </div>
+
+        <div className="grid gap-6 md:grid-cols-3">
+          {/* Основная информация */}
+          <Card className="md:col-span-1">
+            <CardHeader>
+              <CardTitle>Профиль игрока</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex flex-col items-center space-y-4">
+                <Avatar className="h-24 w-24">
+                  <AvatarImage src={user.image || ""} />
+                  <AvatarFallback className="text-lg">{getUserInitials(user)}</AvatarFallback>
+                </Avatar>
+                
+                <div className="flex flex-col items-center text-center">
+                  <h2 className="text-xl font-bold">
+                    {user.name} {user.surname}
+                  </h2>
+                  {user.nickname && (
+                    <p className="text-sm font-medium text-primary">@{user.nickname}</p>
+                  )}
+                </div>
+
+                <div className="flex flex-wrap justify-center gap-2">
+                  {user.isTournamentJudge && (
+                    <Badge variant="secondary">
+                      <Award className="mr-1 h-3 w-3" />
+                      Судья турнира
+                    </Badge>
+                  )}
+                  
+                  {user.isSideJudge && (
+                    <Badge variant="outline">
+                      <Shield className="mr-1 h-3 w-3" />
+                      Боковой судья
+                    </Badge>
+                  )}
+                  
+                  {user.role === "admin" && (
+                    <Badge variant="destructive">
+                      Администратор
+                    </Badge>
+                  )}
+                </div>
+              </div>
+
+              <div className="border-t pt-4 space-y-2">
+                {user.email && (
+                  <div className="flex items-center text-sm">
+                    <Mail className="h-4 w-4 mr-2 text-muted-foreground" />
+                    <span>{user.email}</span>
+                  </div>
+                )}
+                
+                {user.country && (
+                  <div className="flex items-center text-sm">
+                    <MapPin className="h-4 w-4 mr-2 text-muted-foreground" />
+                    <span>{user.country}</span>
+                  </div>
+                )}
+                
+                {user.clubName && (
+                  <div className="flex items-center text-sm">
+                    <Building2 className="h-4 w-4 mr-2 text-muted-foreground" />
+                    <span>{user.clubName}</span>
+                  </div>
+                )}
+                
+                {user.birthday && (
+                  <div className="flex items-center text-sm">
+                    <Cake className="h-4 w-4 mr-2 text-muted-foreground" />
+                    <span>{formatDate(user.birthday)}</span>
+                  </div>
+                )}
+                
+                {user.gender && (
+                  <div className="flex items-center text-sm">
+                    {getGenderIcon(user.gender)}
+                    <span>{getGenderDisplay(user.gender)}</span>
+                  </div>
+                )}
+                
+                {user.createdAt && (
+                  <div className="flex items-center text-sm">
+                    <Clock className="h-4 w-4 mr-2 text-muted-foreground" />
+                    <span>Регистрация: {formatDate(user.createdAt)}</span>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {user.bio ? (
+                      <div className="text-sm whitespace-pre-wrap">
+                        {user.bio}
+                      </div>
+                    ) : (
+                      <div className="text-center text-muted-foreground py-6">
+                        Игрок не добавил информацию о себе
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </TabsContent>
+              
+              <TabsContent value="stats" className="mt-6">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Статистика игрока</CardTitle>
+                    <CardDescription>
+                      Статистика результатов игр и достижений
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {gamesStats?.totalGames ? (
+                      <div className="grid grid-cols-4 gap-4">
+                        <Card>
+                          <CardContent className="pt-6">
+                            <div className="text-center">
+                              <div className="text-2xl font-bold">{gamesStats.totalGames || 0}</div>
+                              <div className="text-sm text-muted-foreground">Всего игр</div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                        <Card>
+                          <CardContent className="pt-6">
+                            <div className="text-center">
+                              <div className="text-2xl font-bold text-green-600">{gamesStats.wins || 0}</div>
+                              <div className="text-sm text-muted-foreground">Побед</div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                        <Card>
+                          <CardContent className="pt-6">
+                            <div className="text-center">
+                              <div className="text-2xl font-bold text-amber-600">{gamesStats.draws || 0}</div>
+                              <div className="text-sm text-muted-foreground">Ничьих</div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                        <Card>
+                          <CardContent className="pt-6">
+                            <div className="text-center">
+                              <div className="text-2xl font-bold text-red-600">{gamesStats.losses || 0}</div>
+                              <div className="text-sm text-muted-foreground">Поражений</div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      </div>
+                    ) : (
+                      <div className="text-center py-6 text-muted-foreground">
+                        Нет данных о сыгранных играх
+                      </div>
+                    )}
+                    
+                    <div className="mt-8">
+                      <h3 className="font-medium mb-4">Прочие достижения</h3>
+                      {user.isTournamentJudge || user.isSideJudge ? (
+                        <div className="space-y-2">
+                          {user.isTournamentJudge && (
+                            <div className="flex items-center p-2 bg-secondary/20 rounded-md">
+                              <Award className="h-5 w-5 mr-2 text-secondary-foreground" />
+                              <div>
+                                <span className="font-medium">Судья турнира</span>
+                                <p className="text-sm text-muted-foreground">
+                                  Этот игрок имеет полномочия судьи турнира
+                                </p>
+                              </div>
+                            </div>
+                          )}
+                          {user.isSideJudge && (
+                            <div className="flex items-center p-2 bg-muted rounded-md">
+                              <Shield className="h-5 w-5 mr-2" />
+                              <div>
+                                <span className="font-medium">Боковой судья</span>
+                                <p className="text-sm text-muted-foreground">
+                                  Этот игрок может выступать в качестве бокового судьи
+                                </p>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="text-center py-4 text-muted-foreground">
+                          У игрока пока нет особых достижений
+                        </div>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+              
+              <TabsContent value="games" className="mt-6">
+                <PlayerStatistics playerId={params.id as string} />
+              </TabsContent>
+              
+              <TabsContent value="history" className="mt-6">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>История игр</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {gamesStats?.totalGames ? (
+                      <div className="space-y-4">
+                        <div className="text-center py-2">
+                          Всего сыграно игр: <span className="font-bold">{gamesStats.totalGames}</span>
+                        </div>
+                        <div className="text-center py-6">
+                          <Link href="/games">
+                            <Button>
+                              <Globe className="mr-2 h-4 w-4" />
+                              Перейти к истории игр
+                            </Button>
+                          </Link>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-center py-6 text-muted-foreground">
+                        Нет данных о сыгранных играх
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </TabsContent>
+            </Tabs>
+          </div>
+        </div>
+      </main>
+
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Вы уверены?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Это действие нельзя отменить. Оно навсегда удалит профиль пользователя и всю связанную информацию.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Отмена</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} disabled={isDeleting} className="bg-red-600 hover:bg-red-700">
+              {isDeleting ? "Удаление..." : "Удалить"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  )
+}

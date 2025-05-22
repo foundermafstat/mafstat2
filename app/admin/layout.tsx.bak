@@ -1,0 +1,158 @@
+"use client"
+
+import type * as React from "react"
+import Link from "next/link"
+import { usePathname } from "next/navigation"
+import { 
+  Users, 
+  Database, 
+  Home,
+  Settings, 
+  LayoutDashboard,
+  Menu,
+  Sun,
+  Moon 
+} from "lucide-react"
+import { useTheme } from "next-themes"
+
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarProvider,
+  SidebarSeparator,
+} from "@/components/ui/sidebar"
+import { Button } from "@/components/ui/button"
+import { Separator } from "@/components/ui/separator"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+
+export default function AdminLayout({
+  children,
+}: {
+  children: React.ReactNode
+}) {
+  const pathname = usePathname()
+  const { setTheme, theme } = useTheme()
+
+  return (
+    <div className="flex min-h-screen w-full flex-col bg-muted/40">
+      <SidebarProvider defaultOpen={true}>
+        <div className="flex flex-1">
+          <Sidebar>
+            <SidebarHeader className="flex h-[60px] items-center px-4">
+              <Link
+                href="/"
+                className="flex items-center gap-2 font-semibold"
+              >
+                <LayoutDashboard className="h-6 w-6" />
+                <span>Админ Панель</span>
+              </Link>
+            </SidebarHeader>
+            <SidebarContent>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    isActive={pathname === "/admin"}
+                    asChild
+                  >
+                    <Link href="/admin">
+                      <Home />
+                      <span>Главная</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    isActive={pathname === "/admin/users" || pathname.startsWith("/admin/users/")}
+                    asChild
+                  >
+                    <Link href="/admin/users">
+                      <Users />
+                      <span>Пользователи</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    isActive={pathname === "/admin/database" || pathname.startsWith("/admin/database/")}
+                    asChild
+                  >
+                    <Link href="/admin/database">
+                      <Database />
+                      <span>База данных</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+              <SidebarSeparator />
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild>
+                    <Link href="/admin/settings">
+                      <Settings />
+                      <span>Настройки</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarContent>
+            <SidebarFooter className="p-4">
+              {/* Мы убрали SidebarTrigger отсюда */}
+            </SidebarFooter>
+          </Sidebar>
+          <main className="flex flex-1 flex-col overflow-hidden">
+            {/* Верхний бар с кнопкой сайдбара и переключателем темы */}
+            <div className="flex items-center justify-between border-b bg-background px-4 py-3">
+              <div className="flex items-center gap-2">
+                {/* Кнопка переключения сайдбара вынесена за пределы самого сайдбара */}
+                <Button variant="ghost" size="icon" className="sidebar-trigger">
+                  <Menu className="h-5 w-5" />
+                </Button>
+                
+                <Button variant="outline" size="sm" asChild>
+                  <Link href="/">Вернуться на сайт</Link>
+                </Button>
+              </div>
+              
+              {/* Переключатель темы */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon">
+                    {theme === "dark" ? (
+                      <Moon className="h-5 w-5" />
+                    ) : (
+                      <Sun className="h-5 w-5" />
+                    )}
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => setTheme("light")}>
+                    Светлая
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setTheme("dark")}>
+                    Тёмная
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setTheme("system")}>
+                    Системная
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+            <div className="flex-1 overflow-auto p-6">
+              {children}
+            </div>
+          </main>
+        </div>
+      </SidebarProvider>
+    </div>
+  )
+}
