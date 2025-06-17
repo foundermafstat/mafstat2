@@ -1,16 +1,22 @@
-import localFont from 'next/font/local'
 import { Inter } from 'next/font/google'
+import localFont from 'next/font/local'
 
-// Загружаем Inter из Google Fonts для основного текста
-export const inter = Inter({ 
-  subsets: ["latin", "cyrillic"],
+// Load Inter font from Google Fonts
+export const inter = Inter({
+  subsets: ['latin', 'cyrillic'],
   display: 'swap',
   variable: '--font-inter',
 })
 
-// Загружаем Bebas Neue локально с поддержкой кириллицы
+// Load Bebas Neue font locally
 export const bebasNeue = localFont({
-  src: './fonts/bebas-neue-cyrillic.woff2',  // Исправленный путь к шрифту
+  src: [
+    {
+      path: './fonts/bebas-neue-cyrillic.woff2',
+      weight: '400',
+      style: 'normal',
+    },
+  ],
   display: 'swap',
   variable: '--font-bebas-neue',
 })
