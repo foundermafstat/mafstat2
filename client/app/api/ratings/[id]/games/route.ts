@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { query } from "@/lib/db";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/auth";
+import { prisma } from "@/lib/prisma";
 
 // GET: Получение игр, включенных в рейтинг
 export async function GET(
@@ -12,13 +12,23 @@ export async function GET(
     const ratingId = params.id;
 
     // Получаем игры, включенные в рейтинг
-    const games = await query(
-      "SELECT g.*, rg.added_at as added_to_rating_at
-       FROM games g
-       JOIN rating_games rg ON g.id = rg.game_id
-       WHERE rg.rating_id = $1
-       ORDER BY g.created_at DESC",
-      [ratingId]
+    const games = await prisma.ratingGame.findMany({
+      where: {
+        ratingId: Number(ratingId)
+      },
+      include: {
+        game: true
+      },
+      orderBy: {
+        game: {
+          createdAt: 'desc'
+        }
+      }
+    }).then(ratingGames => 
+      ratingGames.map(rg => ({
+        ...rg.game,
+        added_to_rating_at: rg.addedAt
+      }))
     );
 
     return NextResponse.json({ success: true, games });
@@ -88,60 +98,59 @@ export async function POST(
       );
     }
     
-    // Проверяем, существуют ли игры
-    const gameIds = await Promise.all(gameIdsToAdd.map(async (gameId: number | string) => {
-      const gameCheck = await query(
-        "SELECT id FROM games WHERE id = $1",
-        [gameId]
-      );
-      
-      if (!gameCheck || gameCheck.length === 0) {
-        console.warn("Game ID ", gameId, "not found");
-        return null;
-      }
-      
-      // Проверяем, не добавлена ли уже эта игра в рейтинг
-      const existingCheck = await query(
-        "SELECT id FROM rating_games WHERE rating_id = $1 AND game_id = $2",
-        [ratingId, gameId]
-      );
-      
-      if (existingCheck && existingCheck.length > 0) {
-        console.warn("Game ID ", gameId, "is already in this rating");
-        return null;
-      }
-      
-      return gameId;
-    }));
+    // Проверяем, что игра не добавлена в рейтинг
+    const existingGames = await prisma.ratingGame.findMany({
+      where: {
+        ratingId: ratingId,
+        gameId: { in: gameIdsToAdd.map((id: string | number) => Number(id)) }
+      },
+      select: { gameId: true }
+    });
     
-    // Фильтруем null значения (невалидные или уже существующие игры)
-    const validGameIds = gameIds.filter(id => id !== null) as number[];
-    
-    if (validGameIds.length === 0) {
+    if (existingGames.length > 0) {
       return NextResponse.json(
-        { success: false, error: "No valid game IDs were provided" },
+        { 
+          success: false, 
+          error: `Game with ID ${existingGames[0].gameId} is already in this rating` 
+        },
         { status: 400 }
       );
     }
     
-    // Добавляем игры в рейтинг
-    for (const gameId of validGameIds) {
-      await query(
-        `INSERT INTO rating_games (rating_id, game_id)
-         VALUES ($1, $2)`,
-        [ratingId, gameId]
+    // Проверяем существование игр
+    const gamesExist = await prisma.game.findMany({
+      where: {
+        id: { in: gameIdsToAdd.map((id: string | number) => Number(id)) }
+      },
+      select: { id: true }
+    });
+    
+    if (gamesExist.length !== gameIdsToAdd.length) {
+      return NextResponse.json(
+        { success: false, error: "One or more games not found" },
+        { status: 404 }
       );
     }
+    
+    // Добавляем игры в рейтинг
+    await prisma.ratingGame.createMany({
+      data: gameIdsToAdd.map((gameId: string | number) => ({
+        ratingId: ratingId,
+        gameId: Number(gameId),
+        addedAt: new Date(),
+        addedBy: session.user?.email || ''
+      })),
+      skipDuplicates: true
+    });
     
     // Запускаем пересчет рейтинговых результатов
     await recalculateRatingResults(ratingId);
     
     return NextResponse.json(
-      { success: true, message: "Game added to rating successfully" },
+      { success: true, message: "Game(s) added to rating successfully" },
       { status: 201 }
     );
   } catch (error) {
-    // Используем сохраненный ID вместо params.id
     console.error("Error adding game to rating", ratingId, ":", error);
     return NextResponse.json(
       { success: false, error: "Failed to add game to rating" },
@@ -203,11 +212,12 @@ export async function DELETE(
     }
     
     // Удаляем игру из рейтинга
-    await query(
-      `DELETE FROM rating_games 
-       WHERE rating_id = $1 AND game_id = $2`,
-      [ratingId, gameId]
-    );
+    await prisma.ratingGame.deleteMany({
+      where: {
+        ratingId: ratingId,
+        gameId: Number(gameId)
+      }
+    });
     
     // Запускаем пересчет рейтинговых результатов
     await recalculateRatingResults(ratingId);
@@ -226,43 +236,55 @@ export async function DELETE(
 async function recalculateRatingResults(ratingId: string | number) {
   try {
     // Сначала очищаем предыдущие результаты
-    await query(
-      "DELETE FROM rating_results WHERE rating_id = $1",
-      [ratingId]
-    );
+    await prisma.ratingResult.deleteMany({
+      where: { ratingId: Number(ratingId) }
+    });
     
     // Получаем все игры в рейтинге
-    const ratingGames = await query(
-      "SELECT game_id FROM rating_games WHERE rating_id = $1",
-      [ratingId]
-    );
+    const ratingGames = await prisma.ratingGame.findMany({
+      where: { ratingId: Number(ratingId) },
+      select: { gameId: true }
+    });
     
     if (!ratingGames || ratingGames.length === 0) {
       return; // Нет игр в рейтинге, нечего пересчитывать
     }
     
     // Извлекаем ID игр
-    const gameIds = ratingGames.map((game: { game_id: number }) => game.game_id);
+    const gameIds = ratingGames.map(game => game.gameId);
     
     // Получаем результаты всех игроков во всех играх рейтинга
-    const playerResults = await query(
-      "SELECT 
-        gp.player_id,
-        gp.role,
-        g.result as game_result,
-        gp.additional_points,
-        g.id as game_id
-      FROM game_players gp
-      JOIN games g ON gp.game_id = g.id
-      WHERE g.id = ANY($1::int[])", 
-      [gameIds]
-    );
+    const playerResults = await prisma.gamePlayer.findMany({
+      where: {
+        gameId: { in: gameIds }
+      },
+      select: {
+        playerId: true,
+        role: true,
+        additionalPoints: true,
+        game: {
+          select: {
+            id: true,
+            result: true
+          }
+        }
+      }
+    });
+    
+    // Преобразуем результаты в ожидаемый формат
+    const formattedPlayerResults = playerResults.map(pr => ({
+      player_id: pr.playerId,
+      role: pr.role,
+      game_result: pr.game.result,
+      additional_points: pr.additionalPoints,
+      game_id: pr.game.id
+    }));
     
     // Структура для сбора статистики по игрокам
     const playerStats = new Map();
     
     // Обрабатываем результаты каждого игрока
-    for (const result of playerResults) {
+    for (const result of formattedPlayerResults) {
       const playerId = result.player_id;
       
       // Если игрок еще не учтен в статистике, добавляем его
@@ -360,32 +382,20 @@ async function recalculateRatingResults(ratingId: string | number) {
     
     // Сохраняем обновленные результаты в базу данных
     for (const [playerId, stats] of playerStats) {
-      await query(`
-        INSERT INTO rating_results (
-          rating_id, 
-          player_id, 
-          points, 
-          games_played, 
-          wins, 
-          civilian_wins, 
-          mafia_wins, 
-          don_games, 
-          sheriff_games, 
-          first_outs
-        )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-      `, [
-        ratingId,
-        playerId,
-        stats.points,
-        stats.games_played,
-        stats.wins,
-        stats.civilian_wins,
-        stats.mafia_wins,
-        stats.don_games,
-        stats.sheriff_games,
-        stats.first_outs
-      ]);
+      await prisma.ratingResult.create({
+        data: {
+          ratingId: Number(ratingId),
+          playerId: playerId,
+          points: stats.points,
+          gamesPlayed: stats.games_played,
+          wins: stats.wins,
+          civilianWins: stats.civilian_wins,
+          mafiaWins: stats.mafia_wins,
+          donGames: stats.don_games,
+          sheriffGames: stats.sheriff_games,
+          firstOuts: stats.first_outs
+        }
+      });
     }
     
     console.log("Recalculated rating results for rating ID", ratingId);

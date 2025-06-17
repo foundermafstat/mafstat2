@@ -8,27 +8,11 @@ import { PlusCircle, Award, Search, Shield, Flag, Warehouse } from "lucide-react
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
+import type { PlayerStats } from "./players-table"
 
-// Интерфейс пользователя (игрока)
-interface UserPlayer {
-  id: string
-  name?: string
-  email?: string
-  image?: string
-  surname?: string
-  nickname?: string
-  country?: string
-  bio?: string
-  gender?: string
-  birthday?: string | Date
-  isTournamentJudge?: boolean
-  isSideJudge?: boolean
-  clubName?: string
-}
-
-export function SearchForm({ initialPlayers }: { initialPlayers: UserPlayer[] }) {
-  const [players] = useState<UserPlayer[]>(initialPlayers)
-  const [filteredPlayers, setFilteredPlayers] = useState<UserPlayer[]>(initialPlayers)
+export function SearchForm({ initialPlayers }: { initialPlayers: PlayerStats[] }) {
+  const [players] = useState<PlayerStats[]>(initialPlayers)
+  const [filteredPlayers, setFilteredPlayers] = useState<PlayerStats[]>(initialPlayers)
   const [searchQuery, setSearchQuery] = useState("")
 
   // Функция поиска по имени, фамилии или никнейму

@@ -25,11 +25,116 @@ const createUserSchema = z.object({
 // Схема для валидации при обновлении (все поля опциональны)
 const updateUserSchema = createUserSchema.partial()
 
+export interface UserWithStats {
+  id: string
+  name: string | null
+  surname: string | null
+  nickname: string | null
+  email: string
+  image: string | null
+  isTournamentJudge: boolean
+  isSideJudge: boolean
+  role: string
+  country: string | null
+  birthday: Date | null
+  gender: string | null
+  club_id: number | null
+  club_name: string | null
+  club_city: string | null
+  club_country: string | null
+  total_games: number
+  civ_win_rate: string
+  mafia_win_rate: string
+  sheriff_win_rate: string
+  don_win_rate: string
+  avg_additional_points: string
+  total_fouls: number
+}
+
+// Cache the users data for 60 seconds
+const USERS_CACHE_TTL = 60 * 1000; // 1 minute
+let cachedUsers: UserWithStats[] | null = null;
+let lastFetchTime = 0;
+
+export async function getUsersWithStats(): Promise<UserWithStats[]> {
+  // Return cached data if it's still valid
+  const now = Date.now();
+  if (cachedUsers && (now - lastFetchTime) < USERS_CACHE_TTL) {
+    return cachedUsers;
+  }
+
+  try {
+    const users = await prisma.user.findMany({
+      select: {
+        id: true,
+        name: true,
+        surname: true,
+        nickname: true,
+        email: true,
+        image: true,
+        isTournamentJudge: true,
+        isSideJudge: true,
+        role: true,
+        country: true,
+        birthday: true,
+        gender: true,
+        clubId: true,
+        club: {
+          select: {
+            id: true,
+            name: true,
+            city: true,
+            country: true
+          }
+        }
+      },
+    });
+
+    // Transform the data to match the expected structure
+    const transformedUsers = users.map(user => ({
+      id: user.id.toString(),
+      name: user.name,
+      surname: user.surname,
+      nickname: user.nickname,
+      email: user.email,
+      image: user.image,
+      isTournamentJudge: user.isTournamentJudge,
+      isSideJudge: user.isSideJudge,
+      role: user.role,
+      country: user.country,
+      birthday: user.birthday,
+      gender: user.gender,
+      club_id: user.clubId,
+      club_name: user.club?.name || null,
+      club_city: user.club?.city || null,
+      club_country: user.club?.country || null,
+      total_games: 0,
+      civ_win_rate: '0',
+      mafia_win_rate: '0',
+      sheriff_win_rate: '0',
+      don_win_rate: '0',
+      avg_additional_points: '0',
+      total_fouls: 0
+    } as UserWithStats));
+
+    // Update cache
+    cachedUsers = transformedUsers;
+    lastFetchTime = now;
+
+    return transformedUsers;
+  } catch (error) {
+    console.error('Error fetching users:', error);
+    // Return empty array instead of throwing to prevent page crashes
+    return [];
+  }
+}
+
 // Получение списка всех пользователей
-export async function getAllUsers() {
+export async function getAllUsers({ clubId }: { clubId?: number } = {}) {
   return await prismaOperation(
     async () => {
       const users = await prisma.user.findMany({
+        where: clubId ? { clubId } : {},
         select: {
           id: true, 
           name: true, 
@@ -46,7 +151,10 @@ export async function getAllUsers() {
           clubId: true,
           club: {
             select: {
-              name: true
+              id: true,
+              name: true,
+              city: true,
+              country: true
             }
           }
         },
@@ -70,7 +178,9 @@ export async function getAllUsers() {
         birthday: user.birthday,
         gender: user.gender,
         club_id: user.clubId,
-        club_name: user.club?.name
+        club_name: user.club?.name,
+        club_city: user.club?.city || null,
+        club_country: user.club?.country || null
       }))
 
       return { data: formattedUsers, status: 200 }

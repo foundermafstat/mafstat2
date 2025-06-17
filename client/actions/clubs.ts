@@ -4,6 +4,18 @@ import { revalidatePath } from "next/cache"
 import { z } from "zod"
 import { prisma, prismaOperation } from "@/lib/prisma"
 
+export type Club = {
+  id: number
+  name: string
+  description: string | null
+  url: string | null
+  country: string | null
+  city: string | null
+  federation_id: number | null
+  created_at: Date
+  updated_at: Date
+}
+
 // Схема для валидации данных клуба при создании
 const createClubSchema = z.object({
   name: z.string().min(1, "Название клуба обязательно"),
@@ -17,51 +29,64 @@ const createClubSchema = z.object({
 // Схема для валидации при обновлении (все поля опциональны)
 const updateClubSchema = createClubSchema.partial()
 
+// Cache for clubs data
+const CLUBS_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+let cachedClubs: Club[] | null = null;
+let lastClubsFetchTime = 0;
+
 // Получение списка всех клубов
-export async function getAllClubs() {
-  return await prismaOperation(
-    async () => {
-      const clubs = await prisma.club.findMany({
-        include: {
-          federation: {
-            select: {
-              name: true
-            }
-          },
-          users: {
-            select: {
-              id: true
-            }
-          },
-          games: {
-            select: {
-              id: true
-            }
+export async function getAllClubs(): Promise<Club[]> {
+  // Return cached data if it's still valid
+  const now = Date.now();
+  if (cachedClubs && (now - lastClubsFetchTime) < CLUBS_CACHE_TTL) {
+    return cachedClubs;
+  }
+
+  try {
+    const clubs = await prisma.club.findMany({
+      select: {
+        id: true,
+        name: true,
+        description: true,
+        url: true,
+        country: true,
+        city: true,
+        federationId: true,
+        createdAt: true,
+        updatedAt: true,
+        _count: {
+          select: {
+            users: true
           }
-        },
-        orderBy: { name: 'asc' }
-      })
+        }
+      },
+      orderBy: {
+        name: 'asc'
+      }
+    });
 
-      // Преобразование данных в формат, ожидаемый фронтендом
-      const formattedClubs = clubs.map(club => ({
-        id: club.id,
-        name: club.name,
-        description: club.description,
-        url: club.url,
-        country: club.country,
-        city: club.city,
-        federation_id: club.federationId,
-        federation_name: club.federation?.name || null,
-        player_count: club.users.length,
-        game_count: club.games.length,
-        created_at: club.createdAt,
-        updated_at: club.updatedAt
-      }))
+    const result = clubs.map(club => ({
+      id: club.id,
+      name: club.name,
+      description: club.description,
+      url: club.url,
+      country: club.country,
+      city: club.city,
+      federation_id: club.federationId,
+      created_at: club.createdAt,
+      updated_at: club.updatedAt,
+      usersCount: club._count.users
+    }));
 
-      return { data: formattedClubs, status: 200 }
-    },
-    "Не удалось получить список клубов"
-  )
+    // Update cache
+    cachedClubs = result;
+    lastClubsFetchTime = now;
+
+    return result;
+  } catch (error) {
+    console.error('Error fetching clubs:', error);
+    return [];
+  }
 }
 
 // Получение клуба по ID
