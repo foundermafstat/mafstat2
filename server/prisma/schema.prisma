@@ -1,0 +1,90 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Модель пользователя
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  username      String?   @unique
+  password      String
+  firstName     String?
+  lastName      String?
+  role          Role      @default(USER)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  games         Game[]    @relation("PlayerGames")
+  gamesLed      Game[]    @relation("GameMaster")
+  refreshTokens RefreshToken[]
+}
+
+// Модель для хранения refresh токенов
+model RefreshToken {
+  id          String    @id @default(uuid())
+  token       String    @unique
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt   DateTime
+  createdAt   DateTime  @default(now())
+}
+
+// Игра мафии
+model Game {
+  id          String    @id @default(uuid())
+  date        DateTime
+  location    String?
+  tableName   String?
+  status      GameStatus @default(SCHEDULED)
+  gameMasterId String?
+  gameMaster  User?     @relation("GameMaster", fields: [gameMasterId], references: [id])
+  players     User[]    @relation("PlayerGames")
+  results     GameResult[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  notes       String?
+  isPublic    Boolean   @default(true)
+}
+
+// Результаты игры
+model GameResult {
+  id        String    @id @default(uuid())
+  gameId    String
+  game      Game      @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  winningTeam    Team
+  mvpPlayerId    String?
+  bestMovePlayerId String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+// Перечисления
+enum Role {
+  USER
+  ADMIN
+  GAME_MASTER
+}
+
+enum GameStatus {
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum Team {
+  MAFIA
+  CIVILIANS
+  DRAW
+}
