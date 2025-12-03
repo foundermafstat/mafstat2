@@ -108,6 +108,10 @@ export const authOptions: NextAuthOptions = {
           if (oauthUser) {
             user.id = oauthUser.id;
             user.role = oauthUser.role;
+            // Сохраняем токен, если он есть
+            if ((oauthUser as any).accessToken) {
+              user.accessToken = (oauthUser as any).accessToken;
+            }
           }
         } catch (error) {
           console.error('Ошибка при обработке OAuth входа:', error);
@@ -116,12 +120,14 @@ export const authOptions: NextAuthOptions = {
       return true;
     },
     async jwt({ token, user, account }) {
-      // Добавляем поля из User в JWT токен
+      // При первом входе (когда есть user) сохраняем данные
       if (user) {
         token.id = user.id
         token.role = user.role
         token.accessToken = user.accessToken
       }
+      // При обновлении сессии сохраняем существующий токен, если он есть
+      // Это важно, чтобы токен не терялся при обновлении сессии
       return token
     },
     async session({ session, token }) {

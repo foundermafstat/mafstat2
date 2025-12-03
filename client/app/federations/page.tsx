@@ -1,12 +1,11 @@
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
-import { getAllFederations } from "@/actions/federations"
+import { getAllFederations } from "@/lib/api-client"
 import { PlusCircle } from "lucide-react"
 import { SearchForm } from "./components/search-form"
 
 export default async function FederationsPage() {
-  const result = await getAllFederations()
-  const federations = result.data || []
+  const federations = await getAllFederations()
   
   return (
     <div className="min-h-screen bg-background">

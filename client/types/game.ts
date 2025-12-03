@@ -15,6 +15,9 @@ export interface Federation {
   additional_points_conditions: any
   created_at: string
   updated_at: string
+  club_count?: number
+  game_count?: number
+  player_count?: number
 }
 
 export interface Club {
@@ -24,8 +27,8 @@ export interface Club {
   description: string | null
   country: string | null
   city: string | null
-  federation_id: number | null
-  federation_name?: string | null
+  federation_ids?: number[]
+  federation_names?: string[]
   player_count?: number
   game_count?: number
   players?: {

@@ -39,6 +39,17 @@ export const getAdminUser = async (req: Request, res: Response): Promise<void> =
   }
 };
 
+export const createAdminUser = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const user = await UserService.createUser(req.body);
+    const { password: _, ...userWithoutPassword } = user;
+    res.status(201).json(userWithoutPassword);
+  } catch (error: any) {
+    console.error('Ошибка при создании пользователя:', error);
+    res.status(400).json({ message: error.message || 'Ошибка сервера при создании пользователя' });
+  }
+};
+
 export const updateAdminUser = async (req: Request, res: Response): Promise<void> => {
   try {
     const user = await UserService.updateUser(req.params.id, req.body);

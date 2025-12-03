@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { MultiSelect } from "@/components/ui/multi-select"
 import Link from "next/link"
 import { ArrowLeft } from "lucide-react"
 import { useData } from "@/hooks/use-data"
@@ -22,7 +22,7 @@ export default function CreateClubPage() {
   const [url, setUrl] = useState("")
   const [country, setCountry] = useState("")
   const [city, setCity] = useState("")
-  const [federationId, setFederationId] = useState("")
+  const [federationIds, setFederationIds] = useState<string[]>([])
 
   const { data: federationsData, isLoading } = useData<any>("/api/federations")
 
@@ -52,7 +52,7 @@ export default function CreateClubPage() {
           url,
           country,
           city,
-          federation_id: federationId ? Number.parseInt(federationId) : null,
+          federation_ids: federationIds.map((id) => Number.parseInt(id)),
         }),
       })
 
@@ -140,26 +140,26 @@ export default function CreateClubPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <label htmlFor="federation" className="text-sm font-medium">
-                    Federation
+                  <label htmlFor="federations" className="text-sm font-medium">
+                    Federations
                   </label>
-                  <Select value={federationId} onValueChange={setFederationId}>
-                    <SelectTrigger id="federation">
-                      <SelectValue placeholder="Select federation" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="-1">None</SelectItem>
-                      {!isLoading &&
-                        federationsData &&
-                        (Array.isArray(federationsData) ? federationsData : federationsData.rows || []).map(
-                          (federation: any) => (
-                            <SelectItem key={federation.id} value={federation.id.toString()}>
-                              {federation.name}
-                            </SelectItem>
-                          ),
-                        )}
-                    </SelectContent>
-                  </Select>
+                  <MultiSelect
+                    options={
+                      !isLoading && federationsData
+                        ? (Array.isArray(federationsData) ? federationsData : federationsData.rows || []).map(
+                            (federation: any) => ({
+                              value: federation.id.toString(),
+                              label: federation.name,
+                            }),
+                          )
+                        : []
+                    }
+                    selected={federationIds}
+                    onChange={setFederationIds}
+                    placeholder="Select federations"
+                    searchPlaceholder="Search federations..."
+                    emptyMessage="No federations found"
+                  />
                 </div>
 
                 <div className="space-y-2">

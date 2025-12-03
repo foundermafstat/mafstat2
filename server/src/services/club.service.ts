@@ -5,10 +5,14 @@ export class ClubService {
   static async getAllClubs() {
     const clubs = await prisma.club.findMany({
       include: {
-        federation: {
-          select: {
-            id: true,
-            name: true,
+        federations: {
+          include: {
+            federation: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
           },
         },
         users: {
@@ -38,8 +42,8 @@ export class ClubService {
       url: club.url,
       country: club.country,
       city: club.city,
-      federation_id: club.federationId,
-      federation_name: club.federation?.name || null,
+      federation_ids: club.federations.map((fc) => fc.federation.id),
+      federation_names: club.federations.map((fc) => fc.federation.name),
       player_count: club._count.users,
       game_count: club._count.games,
       players: club.users.map((user) => ({
@@ -58,10 +62,14 @@ export class ClubService {
     const club = await prisma.club.findUnique({
       where: { id },
       include: {
-        federation: {
-          select: {
-            id: true,
-            name: true,
+        federations: {
+          include: {
+            federation: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
           },
         },
         users: {
@@ -92,8 +100,8 @@ export class ClubService {
       url: club.url,
       country: club.country,
       city: club.city,
-      federation_id: club.federationId,
-      federation_name: club.federation?.name || null,
+      federation_ids: club.federations.map((fc) => fc.federation.id),
+      federation_names: club.federations.map((fc) => fc.federation.name),
       player_count: club._count.users,
       game_count: club._count.games,
       players: club.users.map((user) => ({
@@ -114,26 +122,42 @@ export class ClubService {
     url?: string | null;
     country?: string;
     city?: string;
-    federation_id?: number | null;
+    federation_ids?: number[];
   }) {
-    return prisma.club.create({
+    const club = await prisma.club.create({
       data: {
         name: data.name,
         description: data.description,
         url: data.url,
         country: data.country,
         city: data.city,
-        federationId: data.federation_id,
+        federations: data.federation_ids && data.federation_ids.length > 0
+          ? {
+              create: data.federation_ids.map((federationId) => ({
+                federationId,
+              })),
+            }
+          : undefined,
       },
       include: {
-        federation: {
-          select: {
-            id: true,
-            name: true,
+        federations: {
+          include: {
+            federation: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
           },
         },
       },
     });
+
+    return {
+      ...club,
+      federation_ids: club.federations.map((fc) => fc.federation.id),
+      federation_names: club.federations.map((fc) => fc.federation.name),
+    };
   }
 
   // Обновление клуба
@@ -143,29 +167,56 @@ export class ClubService {
     url?: string | null;
     country?: string;
     city?: string;
-    federation_id?: number | null;
+    federation_ids?: number[];
   }) {
-    const updateData: any = {};
+    // Если переданы federation_ids, обновляем связи
+    if (data.federation_ids !== undefined) {
+      // Удаляем все существующие связи
+      await prisma.federationClub.deleteMany({
+        where: { clubId: id },
+      });
 
+      // Создаем новые связи
+      if (data.federation_ids.length > 0) {
+        await prisma.federationClub.createMany({
+          data: data.federation_ids.map((federationId) => ({
+            clubId: id,
+            federationId,
+          })),
+          skipDuplicates: true,
+        });
+      }
+    }
+
+    const updateData: any = {};
     if (data.name !== undefined) updateData.name = data.name;
     if (data.description !== undefined) updateData.description = data.description;
     if (data.url !== undefined) updateData.url = data.url;
     if (data.country !== undefined) updateData.country = data.country;
     if (data.city !== undefined) updateData.city = data.city;
-    if (data.federation_id !== undefined) updateData.federationId = data.federation_id;
 
-    return prisma.club.update({
+    const club = await prisma.club.update({
       where: { id },
       data: updateData,
       include: {
-        federation: {
-          select: {
-            id: true,
-            name: true,
+        federations: {
+          include: {
+            federation: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
           },
         },
       },
     });
+
+    return {
+      ...club,
+      federation_ids: club.federations.map((fc) => fc.federation.id),
+      federation_names: club.federations.map((fc) => fc.federation.name),
+    };
   }
 
   // Удаление клуба

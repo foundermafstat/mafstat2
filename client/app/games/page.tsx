@@ -1,12 +1,11 @@
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
-import { getAllGames } from "@/actions/games"
+import { getAllGames } from "@/lib/api-client"
 import { PlusCircle } from "lucide-react"
 import { SearchForm } from "./components/search-form"
 
 export default async function GamesPage() {
-  const result = await getAllGames()
-  const games = result.data || []
+  const games = await getAllGames()
   
   // Статистика игр
   const totalGames = games.length

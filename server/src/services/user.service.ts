@@ -49,16 +49,16 @@ export class UserService {
       const totalGames = games.length;
       
       const civWins = games.filter(
-        (gp) => gp.role === 'civilian' && gp.game.result === 'civilians'
+        (gp) => gp.role === 'civilian' && gp.game?.result === 'civilians'
       ).length;
       const mafiaWins = games.filter(
-        (gp) => gp.role === 'mafia' && gp.game.result === 'mafia'
+        (gp) => gp.role === 'mafia' && gp.game?.result === 'mafia'
       ).length;
       const sheriffWins = games.filter(
-        (gp) => gp.role === 'sheriff' && gp.game.result === 'civilians'
+        (gp) => gp.role === 'sheriff' && gp.game?.result === 'civilians'
       ).length;
       const donWins = games.filter(
-        (gp) => gp.role === 'don' && gp.game.result === 'mafia'
+        (gp) => gp.role === 'don' && gp.game?.result === 'mafia'
       ).length;
 
       const totalFouls = games.reduce((sum, gp) => sum + gp.fouls, 0);

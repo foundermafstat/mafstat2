@@ -1,86 +1,44 @@
-"use client"
-
-import { Suspense, useCallback } from "react"
-import { useSearchParams, useRouter } from "next/navigation"
-import { getUsersWithStats, type UserWithStats } from "@/actions/users"
-import { getAllClubs, type Club } from "@/actions/clubs"
+import { Suspense } from "react"
+import { getUsersWithStats, getAllClubs } from "@/lib/api-client"
+import type { Club } from "@/types/game"
 import { PlayersTable } from "./components/players-table"
 import { ClubFilter } from "./components/club-filter"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
+import { PlayersPageClient } from "./components/players-page-client"
 
-// This is a client component that will handle the interactive parts
-function PlayersPageClient({
-  initialPlayers,
-  clubs,
-  initialClubId = null
-}: {
-  initialPlayers: UserWithStats[]
-  clubs: Club[]
-  initialClubId?: number | null
-}) {
-  const router = useRouter()
-  const searchParams = useSearchParams()
-  
-  // Get clubId from URL params or initial prop
-  const clubId = searchParams.get('clubId')
-    ? Number(searchParams.get('clubId'))
-    : initialClubId
-
-  // Filter players by club if clubId is provided
-  const filteredPlayers = clubId
-    ? initialPlayers.filter(player => player.club_id === clubId)
-    : initialPlayers
-
-  const handleClubSelect = useCallback((selectedClubId: number | null) => {
-    const params = new URLSearchParams(searchParams.toString())
-    
-    if (selectedClubId) {
-      params.set('clubId', selectedClubId.toString())
-    } else {
-      params.delete('clubId')
-    }
-    
-    router.push(`/players?${params.toString()}`)
-  }, [router, searchParams])
-
-  return (
-    <div className="min-h-screen bg-background">
-      <main className="container py-6 space-y-6">
-        <div className="flex flex-col space-y-4">
-          <h1 className="text-2xl md:text-3xl font-bold">Игроки</h1>
-          <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
-            <div className="w-full sm:w-[300px]">
-              <ClubFilter 
-                clubs={clubs} 
-                selectedClubId={clubId}
-                onSelect={handleClubSelect}
-              />
-            </div>
-            <Link href="/profile" className="w-full sm:w-auto">
-              <Button className="w-full sm:w-auto">
-                Мой профиль
-              </Button>
-            </Link>
-          </div>
-        </div>
-        
-        <Suspense fallback={<div>Загрузка игроков...</div>}>
-          <PlayersTable 
-            initialPlayers={filteredPlayers} 
-            clubId={clubId} 
-          />
-        </Suspense>
-      </main>
-    </div>
-  )
+// Тип для пользователя со статистикой
+export type UserWithStats = {
+  id: string
+  name: string | null
+  surname: string | null
+  nickname: string | null
+  email: string
+  image: string | null
+  isTournamentJudge: boolean
+  isSideJudge: boolean
+  role: string
+  country: string | null
+  birthday: Date | null
+  gender: string | null
+  club_id: number | null
+  club_name: string | null
+  club_city: string | null
+  club_country: string | null
+  total_games: number
+  civ_win_rate: string
+  mafia_win_rate: string
+  sheriff_win_rate: string
+  don_win_rate: string
+  avg_additional_points: string
+  total_fouls: number
 }
 
 // This is a server component that fetches data
 async function PlayersPage() {
+  // Используем кэширование для уменьшения количества запросов
   const players = await getUsersWithStats()
-  const clubsResult = await getAllClubs()
-  const clubs = clubsResult.data || []
+  const clubs = await getAllClubs()
   
   return (
     <PlayersPageClient 
@@ -89,5 +47,8 @@ async function PlayersPage() {
     />
   )
 }
+
+// Экспортируем настройки кэширования для Next.js
+export const revalidate = 60 // Перевалидировать каждые 60 секунд
 
 export default PlayersPage

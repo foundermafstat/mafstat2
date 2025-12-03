@@ -3,6 +3,7 @@ import {
   getAdminStats,
   getAdminUsers,
   getAdminUser,
+  createAdminUser,
   updateAdminUser,
   deleteAdminUser,
   getAdminProducts,
@@ -19,6 +20,7 @@ router.use(checkRole(['admin']));
 
 router.get('/stats', getAdminStats);
 router.get('/users', getAdminUsers);
+router.post('/users', createAdminUser);
 router.get('/users/:id', getAdminUser);
 router.put('/users/:id', updateAdminUser);
 router.delete('/users/:id', deleteAdminUser);

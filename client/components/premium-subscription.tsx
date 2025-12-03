@@ -6,7 +6,11 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Loader2, CheckCircle2 } from "lucide-react"
-import { createPremiumCheckout, checkPremiumPaymentStatus, getPremiumStatus } from "@/actions/premium"
+import { 
+  createCheckoutSession, 
+  checkPaymentStatus, 
+  getPremiumStatus 
+} from "@/lib/api-client"
 import { premiumPlans, type PremiumPlan } from "@/lib/stripe-client"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 
@@ -127,7 +131,7 @@ export function PremiumSubscription() {
         }
         
         // Затем проверяем статус через стандартный метод
-        const result = await checkPremiumPaymentStatus(sessionId)
+        const result = await checkPaymentStatus(sessionId)
         if (result.success) {
           setPaymentSuccess(true)
           await fetchStatus()
@@ -179,7 +183,9 @@ export function PremiumSubscription() {
     setError(null)
     
     try {
-      const result = await createPremiumCheckout({ planId })
+      // Преобразуем planId в формат для API (monthly/yearly)
+      const apiPlanId: "monthly" | "yearly" = planId === "premium-4" ? "monthly" : "yearly"
+      const result = await createCheckoutSession(apiPlanId)
       
       if (result.error) {
         setError(result.error)

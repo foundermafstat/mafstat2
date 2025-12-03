@@ -16,6 +16,7 @@ import {
   Filter
 } from "lucide-react"
 import { useRouter } from "next/navigation"
+import { useSession } from "next-auth/react"
 
 import { Button } from "@/components/ui/button"
 import { 
@@ -40,7 +41,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog"
 import {
   DropdownMenu,
@@ -63,10 +63,8 @@ import { Badge } from "@/components/ui/badge"
 import { toast } from "@/components/ui/use-toast"
 import { Toaster } from "@/components/ui/toaster"
 import { Checkbox } from "@/components/ui/checkbox"
-
-// Импортируем серверные экшены
-import { getAllUsers, getUserById, updateUser, deleteUser } from "@/actions/admin"
-import { getAllClubs } from "@/actions/clubs"
+import { apiRequest, setAuthTokenFromSession } from "@/lib/api"
+import { getAllClubs } from "@/lib/api-client"
 
 // Тип для пользователя из Prisma
 type User = {
@@ -77,7 +75,6 @@ type User = {
   emailVerified: Date | null
   createdAt: Date
   updatedAt: Date
-  // Дополнительные поля игрока
   bio?: string | null
   surname?: string | null
   nickname?: string | null
@@ -87,7 +84,6 @@ type User = {
   gender?: string | null
   isTournamentJudge?: boolean
   isSideJudge?: boolean
-  // Премиум-статус
   plan?: string
   planUpdatedAt?: Date | null
   premiumNights?: number
@@ -97,27 +93,15 @@ type User = {
   } | null
 }
 
-// Тип для клуба
 type Club = {
   id: number
   name: string
-  description: string | null
-  url: string | null
-  country: string | null
-  city: string | null
-  federation_id: number | null
-  federation_name: string | null
-  player_count: number
-  game_count: number
-  created_at: Date
-  updated_at: Date
 }
 
-// Тип для формы редактирования пользователя
 type UserFormData = {
-  role: "user" | "admin" | "premium"
   name: string
   email: string
+  role: string
   nickname: string | null
   surname: string | null
   country: string | null
@@ -128,10 +112,33 @@ type UserFormData = {
 }
 
 export default function UsersPage() {
+  const router = useRouter()
+  const { data: session, status } = useSession()
+  const accessToken = session?.user?.accessToken as string | undefined
+  const userRole = session?.user?.role as string | undefined
+  const isLoadingSession = status === "loading"
+
+  // Сохраняем токен в localStorage, если он есть в сессии
+  // Если токена нет, но пользователь авторизован, пытаемся получить его через API
+  useEffect(() => {
+    const saveOrGetToken = async () => {
+      if (session?.user?.accessToken) {
+        setAuthTokenFromSession(session.user.accessToken as string)
+        console.log('[UsersPage] Токен сохранен в localStorage из сессии')
+      } else if (session?.user?.id && !accessToken) {
+        // Если токена нет в сессии, но пользователь авторизован, 
+        // пытаемся получить токен через API логин (если есть пароль) или через refresh
+        console.log('[UsersPage] Токен отсутствует в сессии, но пользователь авторизован')
+        // Пока просто логируем - в будущем можно добавить получение токена через API
+      }
+    }
+    saveOrGetToken()
+  }, [session, accessToken])
+
   const [users, setUsers] = useState<User[]>([])
   const [allUsers, setAllUsers] = useState<User[]>([])
   const [clubs, setClubs] = useState<Club[]>([])
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
   const [openDialog, setOpenDialog] = useState(false)
   const [editingUser, setEditingUser] = useState<User | null>(null)
   const [deleteUserId, setDeleteUserId] = useState<number | null>(null)
@@ -153,30 +160,76 @@ export default function UsersPage() {
     isSideJudge: false,
     premiumNights: 0
   })
-  
-  const router = useRouter()
 
-  // Загрузка списка пользователей с использованием Prisma
+  // Проверка авторизации и роли
+  useEffect(() => {
+    if (!isLoadingSession) {
+      if (!session || !session.user) {
+        router.push("/login")
+      } else if (userRole !== 'admin') {
+        router.push("/")
+      }
+    }
+  }, [session, userRole, isLoadingSession, router])
+
+  // Загрузка списка пользователей
   const fetchUsers = async () => {
+    console.log('[UsersPage] fetchUsers вызван, accessToken из сессии:', !!accessToken)
+    
+    // Пытаемся получить токен из localStorage, если его нет в сессии
+    let token = accessToken
+    if (!token && typeof window !== 'undefined') {
+      try {
+        token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken') || null
+        console.log('[UsersPage] fetchUsers: токен из localStorage:', !!token)
+      } catch (e) {
+        console.error('[UsersPage] fetchUsers: ошибка при получении токена из localStorage:', e)
+      }
+    }
+    
+    if (!token) {
+      console.error('[UsersPage] fetchUsers: токен не найден ни в сессии, ни в localStorage')
+      toast({
+        title: "Ошибка",
+        description: "Не авторизован - токен отсутствует. Пожалуйста, войдите заново.",
+        variant: "destructive",
+      })
+      setLoading(false)
+      return
+    }
+    
+    console.log('[UsersPage] fetchUsers: начинаем загрузку с токеном')
     setLoading(true)
     try {
-      const result = await getAllUsers()
+      const usersData = await apiRequest('/admin/users', { 
+        method: 'GET',
+        token: token
+      })
       
-      if (result.error) {
-        throw new Error(result.error)
+      console.log('[UsersPage] fetchUsers: получены данные:', {
+        isArray: Array.isArray(usersData),
+        length: Array.isArray(usersData) ? usersData.length : 'не массив',
+        data: usersData
+      })
+      
+      if (Array.isArray(usersData)) {
+        setAllUsers(usersData)
+        setUsers(usersData)
+        console.log('[UsersPage] fetchUsers: установлены пользователи, количество:', usersData.length)
+      } else {
+        console.error('[UsersPage] fetchUsers: ожидался массив, получено:', usersData)
+        setAllUsers([])
+        setUsers([])
       }
-      
-      const usersData = result.users || []
-      setAllUsers(usersData)
-      setUsers(usersData)
     } catch (error) {
-      console.error('Ошибка:', error)
+      console.error('[UsersPage] fetchUsers: ошибка:', error)
       toast({
         title: "Ошибка",
         description: "Не удалось загрузить список пользователей",
         variant: "destructive",
       })
     } finally {
+      console.log('[UsersPage] fetchUsers: завершено, устанавливаем loading = false')
       setLoading(false)
     }
   }
@@ -184,8 +237,8 @@ export default function UsersPage() {
   // Загрузка списка клубов
   const fetchClubs = async () => {
     try {
-      const result = await getAllClubs()
-      setClubs(result.data || [])
+      const clubsData = await getAllClubs()
+      setClubs(clubsData.map((c: any) => ({ id: c.id, name: c.name })))
     } catch (error) {
       console.error('Ошибка загрузки клубов:', error)
     }
@@ -193,13 +246,26 @@ export default function UsersPage() {
 
   // Фильтрация пользователей
   const filterUsers = () => {
-    let filtered = allUsers
+    console.log('[UsersPage] filterUsers вызван:', {
+      allUsersIsArray: Array.isArray(allUsers),
+      allUsersLength: allUsers.length,
+      searchTerm,
+      selectedClub
+    })
+    
+    if (!Array.isArray(allUsers) || allUsers.length === 0) {
+      console.log('[UsersPage] filterUsers: нет данных для фильтрации')
+      setUsers([])
+      return
+    }
+
+    let filtered = [...allUsers]
 
     // Фильтр по поиску (имя или никнейм)
     if (searchTerm.trim()) {
       const searchLower = searchTerm.toLowerCase()
       filtered = filtered.filter(user => 
-        user.name.toLowerCase().includes(searchLower) ||
+        user.name?.toLowerCase().includes(searchLower) ||
         (user.nickname && user.nickname.toLowerCase().includes(searchLower)) ||
         (user.surname && user.surname.toLowerCase().includes(searchLower))
       )
@@ -211,18 +277,47 @@ export default function UsersPage() {
       filtered = filtered.filter(user => user.clubId === clubId)
     }
 
+    console.log('[UsersPage] filterUsers: отфильтровано пользователей:', filtered.length)
     setUsers(filtered)
   }
 
+  // Загрузка данных при монтировании
+  useEffect(() => {
+    console.log('[UsersPage] useEffect для загрузки данных:', {
+      isLoadingSession,
+      hasSession: !!session,
+      hasUser: !!session?.user,
+      hasToken: !!accessToken,
+      accessTokenValue: accessToken ? accessToken.substring(0, 20) + '...' : 'нет',
+      userRole,
+      sessionUser: session?.user
+    })
+    
+    if (!isLoadingSession && session && session.user) {
+      // Пробуем загрузить данные даже если токена нет в сессии
+      // Токен может быть в localStorage, apiRequest сам его получит
+      console.log('[UsersPage] Загружаем данные...')
+      fetchUsers()
+      fetchClubs()
+    } else {
+      console.log('[UsersPage] Пропускаем загрузку данных:', {
+        isLoadingSession,
+        hasSession: !!session,
+        hasUser: !!session?.user,
+        hasToken: !!accessToken
+      })
+    }
+  }, [isLoadingSession, session, accessToken]) // eslint-disable-line react-hooks/exhaustive-deps
+
   // Применение фильтров при изменении
   useEffect(() => {
+    console.log('[UsersPage] Применение фильтров:', {
+      searchTerm,
+      selectedClub,
+      allUsersCount: allUsers.length
+    })
     filterUsers()
-  }, [searchTerm, selectedClub, allUsers])
-
-  useEffect(() => {
-    fetchUsers()
-    fetchClubs()
-  }, [])
+  }, [searchTerm, selectedClub, allUsers]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Обработка изменения полей формы
   const handleFormChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -235,46 +330,47 @@ export default function UsersPage() {
     setFormData(prev => ({ ...prev, [field]: checked }))
   }
 
-  // Обработка изменения роли
-  const handleRoleChange = (value: "user" | "admin" | "premium") => {
-    setFormData(prev => ({ ...prev, role: value }))
-  }
-
   // Открытие диалога редактирования пользователя
   const handleEditUser = async (userId: number) => {
+    if (!accessToken) {
+      toast({
+        title: "Ошибка",
+        description: "Не авторизован - токен отсутствует",
+        variant: "destructive",
+      })
+      return
+    }
+
     try {
       setLoading(true)
-      const result = await getUserById(userId)
-      
-      if (result.error) {
-        throw new Error(result.error)
-      }
-      
-      const user = result.user
+      const user = await apiRequest(`/admin/users/${userId}`, { 
+        method: 'GET',
+        token: accessToken 
+      })
       
       if (!user) {
         throw new Error("Пользователь не найден")
       }
-      
-      setEditingUser(user as User)
+
+      setEditingUser(user)
       setFormData({
-        name: user.name,
-        email: user.email,
-        role: user.role as "user" | "admin" | "premium",
-        nickname: user.nickname,
-        surname: user.surname,
-        country: user.country,
-        clubId: user.clubId,
+        name: user.name || "",
+        email: user.email || "",
+        role: user.role || "user",
+        nickname: user.nickname || null,
+        surname: user.surname || null,
+        country: user.country || null,
+        clubId: user.clubId || null,
         isTournamentJudge: user.isTournamentJudge || false,
         isSideJudge: user.isSideJudge || false,
         premiumNights: user.premiumNights || 0
       })
       setOpenDialog(true)
     } catch (error) {
-      console.error('Ошибка при загрузке пользователя:', error)
+      console.error('Ошибка:', error)
       toast({
         title: "Ошибка",
-        description: "Не удалось загрузить данные пользователя",
+        description: error instanceof Error ? error.message : 'Неизвестная ошибка',
         variant: "destructive",
       })
     } finally {
@@ -282,44 +378,113 @@ export default function UsersPage() {
     }
   }
 
-  // Открытие диалога удаления пользователя
-  const handleDeleteClick = (userId: number) => {
-    setDeleteUserId(userId)
-    setOpenDeleteDialog(true)
+  // Открытие диалога создания нового пользователя
+  const handleCreateUser = () => {
+    setEditingUser(null)
+    setFormData({
+      name: "",
+      email: "",
+      role: "user",
+      nickname: null,
+      surname: null,
+      country: null,
+      clubId: null,
+      isTournamentJudge: false,
+      isSideJudge: false,
+      premiumNights: 0
+    })
+    setOpenDialog(true)
   }
 
-  // Сохранение пользователя через Prisma
+  // Сохранение пользователя
   const handleSaveUser = async () => {
-    if (!editingUser) return
-    
-    try {
-      // Базовая валидация
-      if (!formData.name || !formData.email) {
-        toast({
-          title: "Ошибка",
-          description: "Имя и Email обязательны для заполнения",
-          variant: "destructive",
-        })
-        return
-      }
-
-      const result = await updateUser(editingUser.id, formData)
-      
-      if (result.error) {
-        throw new Error(result.error)
-      }
-      
+    if (!accessToken) {
       toast({
-        title: "Успех",
-        description: "Пользователь успешно обновлен",
+        title: "Ошибка",
+        description: "Не авторизован - токен отсутствует",
+        variant: "destructive",
       })
-      
-      // Закрытие диалога и обновление списка пользователей
-      setOpenDialog(false)
-      fetchUsers()
-      
+      return
+    }
+
+    try {
+      if (editingUser) {
+        // Преобразуем данные формы в формат, ожидаемый сервером
+        const requestData = {
+          name: formData.name,
+          surname: formData.surname,
+          nickname: formData.nickname,
+          email: formData.email,
+          country: formData.country,
+          club_id: formData.clubId, // Преобразуем clubId в club_id
+          role: formData.role,
+          is_tournament_judge: formData.isTournamentJudge, // Преобразуем в snake_case
+          is_side_judge: formData.isSideJudge, // Преобразуем в snake_case
+          premiumNights: formData.premiumNights
+        }
+        
+        console.log('[UsersPage] Сохранение пользователя:', {
+          userId: editingUser.id,
+          formData,
+          requestData
+        })
+        
+        const response = await apiRequest(`/admin/users/${editingUser.id}`, {
+          method: 'PUT',
+          token: accessToken,
+          body: JSON.stringify(requestData)
+        })
+        
+        console.log('[UsersPage] Пользователь обновлен:', response)
+        
+        toast({
+          title: "Успех",
+          description: "Пользователь успешно обновлен",
+        })
+        
+        setOpenDialog(false)
+        fetchUsers()
+      } else {
+        // Создание нового пользователя
+        // Преобразуем данные формы в формат, ожидаемый сервером
+        const requestData: any = {
+          name: formData.name,
+          email: formData.email,
+          role: formData.role,
+        }
+        
+        // Добавляем опциональные поля только если они заполнены
+        if (formData.surname) requestData.surname = formData.surname
+        if (formData.nickname) requestData.nickname = formData.nickname
+        if (formData.country) requestData.country = formData.country
+        if (formData.clubId) requestData.club_id = formData.clubId
+        if (formData.isTournamentJudge) requestData.is_tournament_judge = formData.isTournamentJudge
+        if (formData.isSideJudge) requestData.is_side_judge = formData.isSideJudge
+        if (formData.premiumNights) requestData.premiumNights = formData.premiumNights
+        
+        console.log('[UsersPage] Создание пользователя:', {
+          formData,
+          requestData
+        })
+        
+        const response = await apiRequest('/admin/users', {
+          method: 'POST',
+          token: accessToken,
+          body: JSON.stringify(requestData)
+        })
+        
+        console.log('[UsersPage] Пользователь создан:', response)
+        
+        toast({
+          title: "Успех",
+          description: "Пользователь успешно создан",
+        })
+        
+        setOpenDialog(false)
+        fetchUsers()
+      }
     } catch (error) {
-      console.error('Ошибка:', error)
+      console.error('[UsersPage] Ошибка при сохранении пользователя:', error)
       toast({
         title: "Ошибка",
         description: error instanceof Error ? error.message : 'Неизвестная ошибка',
@@ -328,16 +493,24 @@ export default function UsersPage() {
     }
   }
 
-  // Удаление пользователя через Prisma
+  // Удаление пользователя
   const handleDeleteUser = async () => {
     if (!deleteUserId) return
 
+    if (!accessToken) {
+      toast({
+        title: "Ошибка",
+        description: "Не авторизован - токен отсутствует",
+        variant: "destructive",
+      })
+      return
+    }
+
     try {
-      const result = await deleteUser(deleteUserId)
-      
-      if (result.error) {
-        throw new Error(result.error)
-      }
+      await apiRequest(`/admin/users/${deleteUserId}`, {
+        method: 'DELETE',
+        token: accessToken
+      })
       
       toast({
         title: "Успех",
@@ -345,6 +518,7 @@ export default function UsersPage() {
       })
       
       setOpenDeleteDialog(false)
+      setDeleteUserId(null)
       fetchUsers()
     } catch (error) {
       console.error('Ошибка:', error)
@@ -356,8 +530,39 @@ export default function UsersPage() {
     }
   }
 
+  // Показываем загрузку, если сессия еще загружается
+  if (isLoadingSession) {
+    return (
+      <div className="container py-6">
+        <div className="animate-pulse space-y-4">
+          <div className="h-8 w-64 bg-muted rounded"></div>
+          <div className="h-64 bg-muted rounded-lg"></div>
+        </div>
+      </div>
+    )
+  }
+
+  // Показываем загрузку, если пользователь не авторизован или не админ
+  if (!session || !session.user || userRole !== 'admin') {
+    return (
+      <div className="container py-6">
+        <div className="text-center py-8">
+          <p>Проверка доступа...</p>
+        </div>
+      </div>
+    )
+  }
+
+  console.log('[UsersPage] Рендерим контент:', {
+    loading,
+    usersCount: users.length,
+    allUsersCount: allUsers.length,
+    clubsCount: clubs.length
+  })
+
   return (
-    <div className="container py-8">
+    <div className="container py-8 min-h-screen bg-background">
+      <Toaster />
       <Card className="w-full mb-6">
         <CardHeader className="flex flex-row items-center justify-between">
           <div>
@@ -423,13 +628,7 @@ export default function UsersPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {loading ? (
-                  <TableRow>
-                    <TableCell colSpan={8} className="text-center py-8">
-                      Загрузка...
-                    </TableCell>
-                  </TableRow>
-                ) : users.length === 0 ? (
+                {users.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={8} className="text-center py-8">
                       {searchTerm || selectedClub !== "all" ? "Пользователи не найдены по заданным критериям" : "Пользователи не найдены"}
@@ -462,48 +661,47 @@ export default function UsersPage() {
                           </Badge>
                         )}
                       </TableCell>
+                      <TableCell>{user.club?.name || "-"}</TableCell>
                       <TableCell>
-                        {user.club ? user.club.name : '-'}
+                        <div className="flex items-center gap-2">
+                          {user.emailVerified ? (
+                            <Badge variant="outline" className="text-green-600 border-green-600">
+                              <CheckCircle className="w-3 h-3 mr-1" />
+                              Подтвержден
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-gray-500">
+                              <XCircle className="w-3 h-3 mr-1" />
+                              Не подтвержден
+                            </Badge>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell>
-                        {user.emailVerified ? (
-                          <Badge variant="outline" className="flex items-center gap-1 font-medium bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
-                            <CheckCircle className="w-3 h-3" />
-                            Подтвержден
-                          </Badge>
-                        ) : (
-                          <Badge variant="outline" className="flex items-center gap-1 font-medium bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200">
-                            <XCircle className="w-3 h-3" />
-                            Не подтвержден
-                          </Badge>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {new Date(user.createdAt).toLocaleDateString()}
+                        {new Date(user.createdAt).toLocaleDateString('ru-RU')}
                       </TableCell>
                       <TableCell className="text-right">
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" className="h-8 w-8 p-0">
-                              <span className="sr-only">Меню</span>
+                            <Button variant="ghost" size="icon">
                               <MoreHorizontal className="h-4 w-4" />
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
                             <DropdownMenuLabel>Действия</DropdownMenuLabel>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem 
-                              onClick={() => handleEditUser(user.id)}
-                              className="flex items-center gap-2"
-                            >
-                              <Pencil className="w-4 h-4" />
+                            <DropdownMenuItem onClick={() => handleEditUser(user.id)}>
+                              <Pencil className="mr-2 h-4 w-4" />
                               Редактировать
                             </DropdownMenuItem>
+                            <DropdownMenuSeparator />
                             <DropdownMenuItem 
-                              onClick={() => handleDeleteClick(user.id)}
-                              className="flex items-center gap-2 text-red-600 focus:text-red-600"
+                              onClick={() => {
+                                setDeleteUserId(user.id)
+                                setOpenDeleteDialog(true)
+                              }}
+                              className="text-red-600"
                             >
-                              <Trash2 className="w-4 h-4" />
+                              <Trash2 className="mr-2 h-4 w-4" />
                               Удалить
                             </DropdownMenuItem>
                           </DropdownMenuContent>
@@ -518,166 +716,167 @@ export default function UsersPage() {
         </CardContent>
       </Card>
 
-      {/* Диалог редактирования пользователя */}
+      {/* Диалог создания/редактирования пользователя */}
       <Dialog open={openDialog} onOpenChange={setOpenDialog}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
-              Редактирование пользователя
+              {editingUser ? "Редактировать пользователя" : "Создать нового пользователя"}
             </DialogTitle>
             <DialogDescription>
-              Измените информацию о пользователе
+              {editingUser
+                ? "Внесите изменения в данные пользователя"
+                : "Заполните форму для создания нового пользователя"}
             </DialogDescription>
           </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="name" className="text-right">
-                Имя
-              </Label>
-              <Input
-                id="name"
-                name="name"
-                value={formData.name}
-                onChange={handleFormChange}
-                className="col-span-3"
-              />
+          <div className="space-y-4 py-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="name">Имя *</Label>
+                <Input
+                  id="name"
+                  name="name"
+                  value={formData.name}
+                  onChange={handleFormChange}
+                  placeholder="Имя"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="surname">Фамилия</Label>
+                <Input
+                  id="surname"
+                  name="surname"
+                  value={formData.surname || ""}
+                  onChange={handleFormChange}
+                  placeholder="Фамилия"
+                />
+              </div>
             </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="email" className="text-right">
-                Email
-              </Label>
+            <div className="space-y-2">
+              <Label htmlFor="email">Email *</Label>
               <Input
                 id="email"
                 name="email"
                 type="email"
                 value={formData.email}
                 onChange={handleFormChange}
-                className="col-span-3"
+                placeholder="email@example.com"
               />
             </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="surname" className="text-right">
-                Фамилия
-              </Label>
-              <Input
-                id="surname"
-                name="surname"
-                value={formData.surname || ''}
-                onChange={handleFormChange}
-                className="col-span-3"
-              />
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="nickname" className="text-right">
-                Никнейм
-              </Label>
+            <div className="space-y-2">
+              <Label htmlFor="nickname">Никнейм</Label>
               <Input
                 id="nickname"
                 name="nickname"
-                value={formData.nickname || ''}
+                value={formData.nickname || ""}
                 onChange={handleFormChange}
-                className="col-span-3"
+                placeholder="Никнейм"
               />
             </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="country" className="text-right">
-                Страна
-              </Label>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="role">Роль *</Label>
+                <Select value={formData.role} onValueChange={(value) => setFormData(prev => ({ ...prev, role: value }))}>
+                  <SelectTrigger id="role">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="user">Пользователь</SelectItem>
+                    <SelectItem value="admin">Администратор</SelectItem>
+                    <SelectItem value="premium">Премиум</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="club">Клуб</Label>
+                <Select 
+                  value={formData.clubId?.toString() || "none"} 
+                  onValueChange={(value) => setFormData(prev => ({ ...prev, clubId: value === "none" ? null : parseInt(value) }))}
+                >
+                  <SelectTrigger id="club">
+                    <SelectValue placeholder="Выберите клуб" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Нет клуба</SelectItem>
+                    {clubs.map((club) => (
+                      <SelectItem key={club.id} value={club.id.toString()}>
+                        {club.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="country">Страна</Label>
               <Input
                 id="country"
                 name="country"
-                value={formData.country || ''}
+                value={formData.country || ""}
                 onChange={handleFormChange}
-                className="col-span-3"
+                placeholder="Страна"
               />
             </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="role" className="text-right">
-                Роль
-              </Label>
-              <Select 
-                value={formData.role}
-                onValueChange={handleRoleChange}
-              >
-                <SelectTrigger className="col-span-3">
-                  <SelectValue placeholder="Выберите роль" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="user">Пользователь</SelectItem>
-                  <SelectItem value="premium">Премиум</SelectItem>
-                  <SelectItem value="admin">Администратор</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            {formData.role === 'premium' && (
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="premiumNights" className="text-right">
-                  Премиум ночи
-                </Label>
-                <Input
-                  id="premiumNights"
-                  name="premiumNights"
-                  type="number"
-                  min="0"
-                  value={formData.premiumNights || 0}
-                  onChange={handleFormChange}
-                  className="col-span-3"
+            <div className="flex items-center space-x-4">
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="isTournamentJudge"
+                  checked={formData.isTournamentJudge}
+                  onCheckedChange={(checked) => handleCheckboxChange('isTournamentJudge', checked as boolean)}
                 />
+                <Label htmlFor="isTournamentJudge">Турнирный судья</Label>
               </div>
-            )}
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label className="text-right">
-                Опции судьи
-              </Label>
-              <div className="col-span-3 flex flex-col space-y-2">
-                <div className="flex items-center space-x-2">
-                  <Checkbox 
-                    id="isTournamentJudge" 
-                    checked={formData.isTournamentJudge}
-                    onCheckedChange={(checked) => handleCheckboxChange('isTournamentJudge', checked === true)}
-                  />
-                  <Label htmlFor="isTournamentJudge">Турнирный судья</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <Checkbox 
-                    id="isSideJudge" 
-                    checked={formData.isSideJudge}
-                    onCheckedChange={(checked) => handleCheckboxChange('isSideJudge', checked === true)}
-                  />
-                  <Label htmlFor="isSideJudge">Боковой судья</Label>
-                </div>
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="isSideJudge"
+                  checked={formData.isSideJudge}
+                  onCheckedChange={(checked) => handleCheckboxChange('isSideJudge', checked as boolean)}
+                />
+                <Label htmlFor="isSideJudge">Боковой судья</Label>
               </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="premiumNights">Премиум ночи</Label>
+              <Input
+                id="premiumNights"
+                name="premiumNights"
+                type="number"
+                value={formData.premiumNights}
+                onChange={(e) => setFormData(prev => ({ ...prev, premiumNights: parseInt(e.target.value) || 0 }))}
+                min="0"
+              />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setOpenDialog(false)}>Отмена</Button>
-            <Button onClick={handleSaveUser}>Сохранить</Button>
+            <Button variant="outline" onClick={() => setOpenDialog(false)}>
+              Отмена
+            </Button>
+            <Button onClick={handleSaveUser} disabled={!formData.name || !formData.email}>
+              {editingUser ? "Сохранить" : "Создать"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       {/* Диалог подтверждения удаления */}
       <Dialog open={openDeleteDialog} onOpenChange={setOpenDeleteDialog}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent>
           <DialogHeader>
             <DialogTitle>Подтверждение удаления</DialogTitle>
             <DialogDescription>
-              Вы уверены, что хотите удалить этого пользователя? Это действие невозможно отменить.
+              Вы уверены, что хотите удалить этого пользователя? Это действие нельзя отменить.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setOpenDeleteDialog(false)}>Отмена</Button>
-            <Button 
-              variant="destructive" 
-              onClick={handleDeleteUser}
-            >
+            <Button variant="outline" onClick={() => setOpenDeleteDialog(false)}>
+              Отмена
+            </Button>
+            <Button variant="destructive" onClick={handleDeleteUser}>
               Удалить
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      
-      <Toaster />
     </div>
   )
 }

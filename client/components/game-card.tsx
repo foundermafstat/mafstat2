@@ -95,7 +95,13 @@ export function GameCard({ game, onDelete }: GameCardProps) {
             </div>
           </CardTitle>
           <div className="text-sm text-muted-foreground">
-            {formatDistanceToNow(new Date(game.created_at), { addSuffix: true })}
+            {(() => {
+              const dateStr = (game as any).created_at || game.createdAt;
+              if (!dateStr) return 'Date unknown';
+              const date = new Date(dateStr);
+              if (isNaN(date.getTime())) return 'Invalid date';
+              return formatDistanceToNow(date, { addSuffix: true });
+            })()}
           </div>
         </CardHeader>
         <CardContent>

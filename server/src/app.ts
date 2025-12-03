@@ -16,12 +16,28 @@ import config from './config';
 // Инициализация приложения Express
 const app = express();
 
-// Настройка лимита запросов
-const limiter = rateLimit({
+// Настройка лимита запросов для публичных GET-запросов (более мягкий)
+const publicLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 минута
+  limit: 60, // 60 запросов в минуту для публичных эндпоинтов
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  skip: (req) => {
+    // Пропускаем для POST/PUT/DELETE запросов (они будут обрабатываться строгим лимитом)
+    return req.method !== 'GET';
+  },
+});
+
+// Настройка строгого лимита для мутаций и защищенных эндпоинтов
+const strictLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 минут
   limit: 100, // лимит запросов с одного IP
   standardHeaders: 'draft-7',
   legacyHeaders: false,
+  skip: (req) => {
+    // Применяем только к POST/PUT/DELETE запросам
+    return req.method === 'GET';
+  },
 });
 
 // Middleware
@@ -34,7 +50,8 @@ app.use(cors({
 app.use(express.json()); // Парсинг JSON
 app.use(express.urlencoded({ extended: true })); // Парсинг URL-encoded
 app.use(cookieParser()); // Парсинг cookies
-app.use(limiter); // Лимит запросов
+app.use(publicLimiter); // Мягкий лимит для GET-запросов
+app.use(strictLimiter); // Строгий лимит для мутаций
 
 // Маршруты API
 app.use('/api/auth', authRoutes);

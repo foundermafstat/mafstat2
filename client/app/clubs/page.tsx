@@ -1,12 +1,11 @@
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
-import { getAllClubs } from "@/actions/clubs"
+import { getAllClubs } from "@/lib/api-client"
 import { PlusCircle } from "lucide-react"
 import { SearchForm } from "./components/search-form"
 
 export default async function ClubsPage() {
-  const result = await getAllClubs()
-  const clubs = result.data || []
+  const clubs = await getAllClubs()
   
   return (
     <div className="min-h-screen bg-background">

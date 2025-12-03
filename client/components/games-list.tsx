@@ -7,6 +7,16 @@ import { Button } from "@/components/ui/button"
 import { formatDistanceToNow } from "date-fns"
 import { RefreshCw } from "lucide-react"
 import { fetchData } from "@/lib/actions"
+import type { Game } from "@/types/game"
+
+// Helper function to safely format date
+function formatGameDate(game: Game): string {
+  const dateStr = (game as any).created_at || game.createdAt;
+  if (!dateStr) return 'Date unknown';
+  const date = new Date(dateStr);
+  if (isNaN(date.getTime())) return 'Invalid date';
+  return formatDistanceToNow(date, { addSuffix: true });
+}
 
 export function GamesList() {
   const [games, setGames] = useState<Game[]>([])
@@ -91,7 +101,7 @@ export function GamesList() {
             <CardHeader className="pb-2">
               <CardTitle>{game.name || `Game #${game.id}`}</CardTitle>
               <div className="text-sm text-muted-foreground">
-                {formatDistanceToNow(new Date(game.created_at), { addSuffix: true })}
+                {formatGameDate(game)}
               </div>
             </CardHeader>
             <CardContent>

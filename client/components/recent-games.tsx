@@ -6,6 +6,15 @@ import { Button } from "@/components/ui/button"
 import { formatDistanceToNow } from "date-fns"
 import Link from "next/link"
 import type { Game } from "@/types/game"
+
+// Helper function to safely format date
+function formatGameDate(game: Game): string {
+  const dateStr = (game as any).created_at || game.createdAt;
+  if (!dateStr) return 'Date unknown';
+  const date = new Date(dateStr);
+  if (isNaN(date.getTime())) return 'Invalid date';
+  return formatDistanceToNow(date, { addSuffix: true });
+}
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { AlertCircle, RefreshCw } from "lucide-react"
@@ -138,7 +147,7 @@ export function RecentGames() {
                 <Badge>{game.game_type}</Badge>
               </CardTitle>
               <div className="text-sm text-muted-foreground">
-                {formatDistanceToNow(new Date(game.created_at), { addSuffix: true })}
+                {formatGameDate(game)}
               </div>
             </CardHeader>
             <CardContent>

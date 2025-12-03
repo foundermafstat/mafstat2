@@ -3,8 +3,21 @@ import { prisma } from '../utils/db';
 export class FederationService {
   // Получение всех федераций
   static async getAllFederations() {
-    return prisma.federation.findMany({
+    const federations = await prisma.federation.findMany({
       include: {
+        clubs: {
+          include: {
+            club: {
+              include: {
+                users: {
+                  select: {
+                    id: true,
+                  },
+                },
+              },
+            },
+          },
+        },
         _count: {
           select: {
             clubs: true,
@@ -16,19 +29,56 @@ export class FederationService {
         createdAt: 'desc',
       },
     });
+
+    // Вычисляем количество уникальных игроков для каждой федерации
+    return federations.map((federation) => {
+      // Собираем все уникальные ID пользователей из всех клубов федерации
+      const uniquePlayerIds = new Set<number>();
+      federation.clubs.forEach((fc) => {
+        fc.club.users.forEach((user) => {
+          uniquePlayerIds.add(user.id);
+        });
+      });
+
+      return {
+        id: federation.id,
+        name: federation.name,
+        description: federation.description,
+        url: federation.url,
+        country: federation.country,
+        city: federation.city,
+        additionalPointsConditions: federation.additionalPointsConditions,
+        createdAt: federation.createdAt,
+        updatedAt: federation.updatedAt,
+        club_count: federation._count.clubs,
+        game_count: federation._count.games,
+        player_count: uniquePlayerIds.size,
+      };
+    });
   }
 
   // Получение федерации по ID
   static async getFederationById(id: number) {
-    return prisma.federation.findUnique({
+    const federation = await prisma.federation.findUnique({
       where: { id },
       include: {
         clubs: {
-          select: {
-            id: true,
-            name: true,
-            city: true,
-            country: true,
+          include: {
+            club: {
+              include: {
+                users: {
+                  select: {
+                    id: true,
+                  },
+                },
+                _count: {
+                  select: {
+                    users: true,
+                    games: true,
+                  },
+                },
+              },
+            },
           },
         },
         _count: {
@@ -39,6 +89,41 @@ export class FederationService {
         },
       },
     });
+
+    if (!federation) {
+      return null;
+    }
+
+    // Вычисляем количество уникальных игроков
+    const uniquePlayerIds = new Set<number>();
+    federation.clubs.forEach((fc) => {
+      fc.club.users.forEach((user) => {
+        uniquePlayerIds.add(user.id);
+      });
+    });
+
+    return {
+      id: federation.id,
+      name: federation.name,
+      description: federation.description,
+      url: federation.url,
+      country: federation.country,
+      city: federation.city,
+      additionalPointsConditions: federation.additionalPointsConditions,
+      createdAt: federation.createdAt,
+      updatedAt: federation.updatedAt,
+      clubs: federation.clubs.map((fc) => ({
+        id: fc.club.id,
+        name: fc.club.name,
+        city: fc.club.city,
+        country: fc.club.country,
+        player_count: fc.club._count.users,
+        game_count: fc.club._count.games,
+      })),
+      club_count: federation._count.clubs,
+      game_count: federation._count.games,
+      player_count: uniquePlayerIds.size,
+    };
   }
 
   // Создание федерации

@@ -36,6 +36,7 @@ export async function saveOAuthUser(
       name: result.user.name,
       email: result.user.email,
       role: result.user.role || 'user',
+      accessToken: result.accessToken, // Возвращаем токен из API
     };
   } catch (error) {
     console.error("Error saving OAuth user:", error);

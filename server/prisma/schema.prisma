@@ -22,11 +22,25 @@ model Federation {
   createdAt                  DateTime @default(now()) @map("created_at")
   updatedAt                  DateTime @default(now()) @map("updated_at")
 
-  // Связи
-  clubs Club[] @relation("FederationToClubs")
+  // Связи (many-to-many с клубами)
+  clubs FederationClub[] @relation("FederationToFederationClubs")
   games Game[] @relation("FederationToGames")
 
   @@map("federations")
+}
+
+// Связующая таблица для many-to-many связи между федерациями и клубами
+model FederationClub {
+  id           Int        @id @default(autoincrement())
+  federationId Int        @map("federation_id")
+  clubId       Int        @map("club_id")
+  createdAt    DateTime   @default(now()) @map("created_at")
+
+  federation   Federation @relation("FederationToFederationClubs", fields: [federationId], references: [id], onDelete: Cascade)
+  club         Club       @relation("ClubToFederationClubs", fields: [clubId], references: [id], onDelete: Cascade)
+
+  @@unique([federationId, clubId])
+  @@map("federation_clubs")
 }
 
 // Клубы
@@ -37,12 +51,11 @@ model Club {
   url          String?  @db.VarChar(255)
   country      String?  @db.VarChar(100)
   city         String?  @db.VarChar(100)
-  federationId Int?     @map("federation_id")
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @default(now()) @map("updated_at")
 
-  // Связи
-  federation Federation? @relation("FederationToClubs", fields: [federationId], references: [id], onDelete: SetNull)
+  // Связи (many-to-many с федерациями)
+  federations FederationClub[] @relation("ClubToFederationClubs")
   users      User[]      @relation("ClubToUsers")
   players    Player[]    @relation("ClubToPlayers")
   games      Game[]      @relation("ClubToGames")

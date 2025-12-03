@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { MultiSelect } from "@/components/ui/multi-select"
 import Link from "next/link"
 import { ArrowLeft } from "lucide-react"
 import { useData } from "@/hooks/use-data"
@@ -26,7 +26,7 @@ export default function EditClubPage() {
   const [url, setUrl] = useState("")
   const [country, setCountry] = useState("")
   const [city, setCity] = useState("")
-  const [federationId, setFederationId] = useState("")
+  const [federationIds, setFederationIds] = useState<string[]>([])
 
   useEffect(() => {
     if (club) {
@@ -35,7 +35,14 @@ export default function EditClubPage() {
       setUrl(club.url || "")
       setCountry(club.country || "")
       setCity(club.city || "")
-      setFederationId(club.federation_id ? club.federation_id.toString() : "")
+      // Поддерживаем оба варианта: старый (federation_id) и новый (federation_ids)
+      if (club.federation_ids && Array.isArray(club.federation_ids)) {
+        setFederationIds(club.federation_ids.map((id: number) => id.toString()))
+      } else if (club.federation_id) {
+        setFederationIds([club.federation_id.toString()])
+      } else {
+        setFederationIds([])
+      }
     }
   }, [club])
 
@@ -65,7 +72,7 @@ export default function EditClubPage() {
           url,
           country,
           city,
-          federation_id: federationId ? Number.parseInt(federationId) : null,
+          federation_ids: federationIds.map((id) => Number.parseInt(id)),
         }),
       })
 
@@ -179,26 +186,26 @@ export default function EditClubPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <label htmlFor="federation" className="text-sm font-medium">
-                    Federation
+                  <label htmlFor="federations" className="text-sm font-medium">
+                    Federations
                   </label>
-                  <Select value={federationId} onValueChange={setFederationId}>
-                    <SelectTrigger id="federation">
-                      <SelectValue placeholder="Select federation" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">None</SelectItem>
-                      {!isLoadingFederations &&
-                        federationsData &&
-                        (Array.isArray(federationsData) ? federationsData : federationsData.rows || []).map(
-                          (federation: any) => (
-                            <SelectItem key={federation.id} value={federation.id.toString()}>
-                              {federation.name}
-                            </SelectItem>
-                          ),
-                        )}
-                    </SelectContent>
-                  </Select>
+                  <MultiSelect
+                    options={
+                      !isLoadingFederations && federationsData
+                        ? (Array.isArray(federationsData) ? federationsData : federationsData.rows || []).map(
+                            (federation: any) => ({
+                              value: federation.id.toString(),
+                              label: federation.name,
+                            }),
+                          )
+                        : []
+                    }
+                    selected={federationIds}
+                    onChange={setFederationIds}
+                    placeholder="Select federations"
+                    searchPlaceholder="Search federations..."
+                    emptyMessage="No federations found"
+                  />
                 </div>
 
                 <div className="space-y-2">

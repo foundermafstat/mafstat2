@@ -1,7 +1,8 @@
 // Клиентские обертки для API запросов
 // Эти функции заменяют серверные экшены и работают напрямую с API сервера
 
-import { api } from './api';
+import { api, apiRequest } from './api';
+import { useSession } from 'next-auth/react';
 
 // ========== USERS ==========
 export async function getUsers(clubId?: number) {

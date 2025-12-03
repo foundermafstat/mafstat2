@@ -9,14 +9,32 @@ async function getAuthToken(): Promise<string | null> {
     return null;
   }
   
-  // Пытаемся получить токен из localStorage или sessionStorage
-  // В реальном приложении токен должен храниться безопасно
+  // Сначала пытаемся получить токен из localStorage или sessionStorage
   try {
     const token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
-    return token;
+    if (token) {
+      return token;
+    }
   } catch {
-    return null;
+    // Игнорируем ошибки при доступе к localStorage
   }
+
+  // Если токена нет в localStorage, пытаемся получить из NextAuth сессии через API
+  try {
+    const response = await fetch('/api/auth/session');
+    if (response.ok) {
+      const session = await response.json();
+      if (session?.user?.accessToken) {
+        // Сохраняем токен в localStorage для последующих запросов
+        localStorage.setItem('accessToken', session.user.accessToken);
+        return session.user.accessToken;
+      }
+    }
+  } catch {
+    // Игнорируем ошибки при получении сессии
+  }
+
+  return null;
 }
 
 // Функция для установки токена из сессии NextAuth
@@ -26,11 +44,14 @@ export function setAuthTokenFromSession(token: string | undefined) {
   }
 }
 
-export async function apiRequest(endpoint: string, options: RequestInit = {}) {
+export async function apiRequest(endpoint: string, options: RequestInit & { token?: string | null } = {}) {
   const url = `${API_URL}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
   
-  // Получаем токен авторизации
-  const token = await getAuthToken();
+  // Получаем токен авторизации - сначала из опций, потом из localStorage, потом из сессии
+  let token = options.token;
+  if (!token) {
+    token = await getAuthToken();
+  }
   
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
@@ -41,16 +62,31 @@ export async function apiRequest(endpoint: string, options: RequestInit = {}) {
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
   }
+  
+  // Удаляем token из options, чтобы не передавать его в fetch
+  const { token: _, ...fetchOptions } = options;
 
   const response = await fetch(url, {
-    ...options,
+    ...fetchOptions,
     headers,
     credentials: 'include', // Включаем cookies для CORS
   });
 
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.message || `API Error: ${response.statusText}`);
+    let errorMessage = `API Error: ${response.statusText}`;
+    try {
+      const errorData = await response.json();
+      errorMessage = errorData.message || errorMessage;
+    } catch {
+      // Если не удалось распарсить JSON, используем текст ответа
+      try {
+        const text = await response.text();
+        if (text) errorMessage = text;
+      } catch {
+        // Игнорируем ошибки при чтении текста
+      }
+    }
+    throw new Error(errorMessage);
   }
 
   return response.json();

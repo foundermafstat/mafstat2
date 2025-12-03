@@ -1,6 +1,6 @@
 import * as jwt from 'jsonwebtoken';
 import bcrypt from 'bcrypt';
-import { User } from '../generated/prisma';
+import { User } from '@prisma/client';
 import config from '../config';
 
 // Тип для полезной нагрузки токена

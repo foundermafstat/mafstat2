@@ -2,7 +2,7 @@
 
 import { useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { Shield, Users, Database, Settings, CreditCard } from "lucide-react"
+import { Shield, Users, Database, Settings, CreditCard, Building2 } from "lucide-react"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
@@ -60,6 +60,30 @@ export default function AdminPage() {
           <CardFooter>
             <Button asChild>
               <Link href="/admin/database">Управление базой данных</Link>
+            </Button>
+          </CardFooter>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <Building2 className="h-5 w-5 text-primary" />
+              <CardTitle>Клубы</CardTitle>
+            </div>
+            <CardDescription>Управление клубами</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p>Доступные действия:</p>
+            <ul className="list-disc list-inside mt-2 space-y-1 text-sm">
+              <li>Просмотр списка клубов</li>
+              <li>Создание новых клубов</li>
+              <li>Редактирование существующих</li>
+              <li>Управление федерациями клубов</li>
+            </ul>
+          </CardContent>
+          <CardFooter>
+            <Button asChild>
+              <Link href="/admin/clubs">Управление клубами</Link>
             </Button>
           </CardFooter>
         </Card>
