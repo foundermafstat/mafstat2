@@ -36,6 +36,27 @@ export async function GET(
       ...data,
       created_at: data.createdAt ? (typeof data.createdAt === 'string' ? data.createdAt : data.createdAt.toISOString()) : data.created_at,
       updated_at: data.updatedAt ? (typeof data.updatedAt === 'string' ? data.updatedAt : data.updatedAt.toISOString()) : data.updated_at,
+      // Преобразуем gamePlayers в players для совместимости
+      players: data.gamePlayers ? data.gamePlayers.map((gp: any) => ({
+        id: gp.id,
+        player_id: gp.playerId || gp.player?.id,
+        role: gp.role,
+        slot_number: gp.slotNumber,
+        additional_points: gp.additionalPoints || gp.additional_points || 0,
+        fouls: gp.fouls || 0,
+        name: gp.player?.name,
+        surname: gp.player?.surname,
+        nickname: gp.player?.nickname,
+        photo_url: gp.player?.image || gp.player?.photoUrl,
+        club_name: gp.player?.club?.name,
+      })) : data.players || [],
+      // Преобразуем gameStages в stages
+      stages: data.gameStages ? data.gameStages.map((gs: any) => ({
+        id: gs.id,
+        type: gs.type,
+        order_number: gs.orderNumber,
+        data: gs.data,
+      })) : data.stages || [],
     }
     
     return NextResponse.json(formattedData)
