@@ -6,6 +6,11 @@ import cookieParser from 'cookie-parser';
 import { rateLimit } from 'express-rate-limit';
 import authRoutes from './routes/auth.routes';
 import gameRoutes from './routes/game.routes';
+import userRoutes from './routes/user.routes';
+import clubRoutes from './routes/club.routes';
+import federationRoutes from './routes/federation.routes';
+import paymentRoutes from './routes/payment.routes';
+import adminRoutes from './routes/admin.routes';
 import config from './config';
 
 // Инициализация приложения Express
@@ -34,6 +39,11 @@ app.use(limiter); // Лимит запросов
 // Маршруты API
 app.use('/api/auth', authRoutes);
 app.use('/api/games', gameRoutes);
+app.use('/api/users', userRoutes);
+app.use('/api/clubs', clubRoutes);
+app.use('/api/federations', federationRoutes);
+app.use('/api/payments', paymentRoutes);
+app.use('/api/admin', adminRoutes);
 
 // Маршрут для проверки состояния сервера
 app.get('/api/health', (req: Request, res: Response) => {

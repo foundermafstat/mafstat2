@@ -42,7 +42,11 @@ export const checkRole = (roles: string[]) => {
       return;
     }
 
-    if (roles.includes(req.user.role)) {
+    // Проверяем роль (может быть 'admin' или 'ADMIN' в зависимости от системы)
+    const userRole = req.user.role?.toLowerCase();
+    const allowedRoles = roles.map(r => r.toLowerCase());
+    
+    if (allowedRoles.includes(userRole)) {
       next();
     } else {
       res.status(403).json({ message: 'Доступ запрещен - недостаточно прав' });

@@ -2,8 +2,9 @@ import { Request, Response } from 'express';
 import { prisma } from '../utils/db';
 import { hashPassword, comparePasswords, generateToken, generateRefreshToken } from '../utils/auth';
 import { add } from 'date-fns';
-import config from '../config';
+import { UserService } from '../services/user.service';
 
+// ========== AUTH FUNCTIONS ==========
 // Регистрация нового пользователя
 export const register = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -35,7 +36,6 @@ export const register = async (req: Request, res: Response): Promise<void> => {
     const hashedPassword = await hashPassword(password);
 
     // Создаем пользователя
-    // Используем firstName + lastName как name, и username как nickname
     const newUser = await prisma.user.create({
       data: {
         email,
@@ -51,7 +51,7 @@ export const register = async (req: Request, res: Response): Promise<void> => {
     const refreshToken = generateRefreshToken();
 
     // Сохраняем refresh token в базе
-    const expiresAt = add(new Date(), { days: 30 }); // 30 дней
+    const expiresAt = add(new Date(), { days: 30 });
     await prisma.refreshToken.create({
       data: {
         token: refreshToken,
@@ -105,7 +105,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
     const refreshToken = generateRefreshToken();
 
     // Сохраняем refresh token в базе
-    const expiresAt = add(new Date(), { days: 30 }); // 30 дней
+    const expiresAt = add(new Date(), { days: 30 });
     await prisma.refreshToken.create({
       data: {
         token: refreshToken,
@@ -139,8 +139,6 @@ export const oauthLogin = async (req: Request, res: Response): Promise<void> => 
 
     // 1. Ищем аккаунт по провайдеру
     if (provider && providerAccountId) {
-      // Используем findFirst, так как составной ключ в Account это @@unique([provider, providerAccountId])
-      // Но Prisma генерирует уникальный индекс provider_providerAccountId
       const account = await prisma.account.findUnique({
         where: {
           provider_providerAccountId: {
@@ -200,7 +198,7 @@ export const oauthLogin = async (req: Request, res: Response): Promise<void> => 
           name: name || email.split('@')[0],
           image,
           emailVerified: new Date(),
-          role: 'user' // Corrected from 'user' to default string if needed, but 'user' is fine as string
+          role: 'user'
         }
       });
 
@@ -291,8 +289,9 @@ export const getProfile = async (req: Request, res: Response): Promise<void> => 
       return;
     }
 
+    const userId = typeof req.user.userId === 'string' ? parseInt(req.user.userId) : req.user.userId;
     const user = await prisma.user.findUnique({
-      where: { id: req.user.userId }
+      where: { id: userId }
     });
 
     if (!user) {
@@ -325,5 +324,144 @@ export const logout = async (req: Request, res: Response): Promise<void> => {
   } catch (error) {
     console.error('Ошибка при выходе:', error);
     res.status(500).json({ message: 'Ошибка сервера при выходе' });
+  }
+};
+
+// ========== USER CRUD FUNCTIONS ==========
+
+// Расширяем контроллер для работы с профилем
+// Обновление профиля (использует UserService)
+export const updateProfile = async (req: Request, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ message: 'Не авторизован' });
+      return;
+    }
+
+    const userId = typeof req.user.userId === 'string' ? parseInt(req.user.userId) : req.user.userId;
+    const result = await UserService.updateProfile(userId, req.body);
+    const { password: _, ...userWithoutPassword } = result;
+    res.status(200).json(userWithoutPassword);
+  } catch (error: any) {
+    console.error('Ошибка при обновлении профиля:', error);
+    res.status(500).json({ message: error.message || 'Ошибка сервера при обновлении профиля' });
+  }
+};
+
+export const changePassword = async (req: Request, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ message: 'Не авторизован' });
+      return;
+    }
+
+    const { currentPassword, newPassword } = req.body;
+    const userId = typeof req.user.userId === 'string' ? parseInt(req.user.userId) : req.user.userId;
+    await UserService.changePassword(userId, currentPassword, newPassword);
+    res.status(200).json({ message: 'Пароль успешно изменен' });
+  } catch (error: any) {
+    console.error('Ошибка при изменении пароля:', error);
+    res.status(400).json({ message: error.message || 'Ошибка сервера при изменении пароля' });
+  }
+};
+
+export const getUsers = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const clubId = req.query.clubId ? parseInt(req.query.clubId as string) : undefined;
+    const users = await UserService.getAllUsers(clubId);
+    res.status(200).json(users);
+  } catch (error) {
+    console.error('Ошибка при получении пользователей:', error);
+    res.status(500).json({ message: 'Ошибка сервера при получении пользователей' });
+  }
+};
+
+export const getUsersWithStats = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const users = await UserService.getUsersWithStats();
+    res.status(200).json(users);
+  } catch (error) {
+    console.error('Ошибка при получении пользователей со статистикой:', error);
+    res.status(500).json({ message: 'Ошибка сервера при получении пользователей' });
+  }
+};
+
+export const getUser = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const user = await UserService.getUserById(req.params.id);
+    if (!user) {
+      res.status(404).json({ message: 'Пользователь не найден' });
+      return;
+    }
+    const { password: _, ...userWithoutPassword } = user;
+    res.status(200).json(userWithoutPassword);
+  } catch (error) {
+    console.error('Ошибка при получении пользователя:', error);
+    res.status(500).json({ message: 'Ошибка сервера при получении пользователя' });
+  }
+};
+
+export const createUser = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const user = await UserService.createUser(req.body);
+    const { password: _, ...userWithoutPassword } = user;
+    res.status(201).json(userWithoutPassword);
+  } catch (error: any) {
+    console.error('Ошибка при создании пользователя:', error);
+    res.status(400).json({ message: error.message || 'Ошибка сервера при создании пользователя' });
+  }
+};
+
+export const updateUser = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const user = await UserService.updateUser(req.params.id, req.body);
+    const { password: _, ...userWithoutPassword } = user;
+    res.status(200).json(userWithoutPassword);
+  } catch (error: any) {
+    console.error('Ошибка при обновлении пользователя:', error);
+    res.status(400).json({ message: error.message || 'Ошибка сервера при обновлении пользователя' });
+  }
+};
+
+export const deleteUser = async (req: Request, res: Response): Promise<void> => {
+  try {
+    await UserService.deleteUser(req.params.id);
+    res.status(200).json({ message: 'Пользователь успешно удален' });
+  } catch (error: any) {
+    console.error('Ошибка при удалении пользователя:', error);
+    res.status(400).json({ message: error.message || 'Ошибка сервера при удалении пользователя' });
+  }
+};
+
+export const getPremiumStatus = async (req: Request, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ message: 'Не авторизован' });
+      return;
+    }
+
+    const userId = typeof req.user.userId === 'string' ? parseInt(req.user.userId) : req.user.userId;
+    const status = await UserService.getPremiumStatus(userId);
+    res.status(200).json({ success: true, ...status });
+  } catch (error: any) {
+    console.error('Ошибка при получении премиум статуса:', error);
+    res.status(400).json({ success: false, error: error.message || 'Ошибка сервера' });
+  }
+};
+
+export const usePremiumNight = async (req: Request, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ message: 'Не авторизован' });
+      return;
+    }
+
+    const { gameId } = req.body;
+    const userId = typeof req.user.userId === 'string' ? parseInt(req.user.userId) : req.user.userId;
+    await UserService.usePremiumNight(userId, gameId);
+    res.status(200).json({ success: true, message: 'Премиум ночь использована' });
+  } catch (error: any) {
+    console.error('Ошибка при использовании премиум ночи:', error);
+    res.status(400).json({ success: false, error: error.message || 'Ошибка сервера' });
   }
 };

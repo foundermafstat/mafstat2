@@ -27,8 +27,8 @@ export const comparePasswords = async (
 // Создание JWT токена
 export const generateToken = (user: User): string => {
   const payload: JwtPayload = {
-    userId: user.id,
-    email: user.email,
+    userId: user.id.toString(),
+    email: user.email || '',
     role: user.role
   };
 
