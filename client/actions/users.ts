@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache"
 import { z } from "zod"
-import { prisma, prismaOperation } from "@/lib/prisma"
+import { api } from "@/lib/api"
 
 // Схема для валидации данных пользователя при создании
 const createUserSchema = z.object({
@@ -64,129 +64,30 @@ export async function getUsersWithStats(): Promise<UserWithStats[]> {
   }
 
   try {
-    const users = await prisma.user.findMany({
-      select: {
-        id: true,
-        name: true,
-        surname: true,
-        nickname: true,
-        email: true,
-        image: true,
-        isTournamentJudge: true,
-        isSideJudge: true,
-        role: true,
-        country: true,
-        birthday: true,
-        gender: true,
-        clubId: true,
-        club: {
-          select: {
-            id: true,
-            name: true,
-            city: true,
-            country: true
-          }
-        }
-      },
-    });
-
-    // Transform the data to match the expected structure
-    const transformedUsers = users.map(user => ({
-      id: user.id.toString(),
-      name: user.name,
-      surname: user.surname,
-      nickname: user.nickname,
-      email: user.email,
-      image: user.image,
-      isTournamentJudge: user.isTournamentJudge,
-      isSideJudge: user.isSideJudge,
-      role: user.role,
-      country: user.country,
-      birthday: user.birthday,
-      gender: user.gender,
-      club_id: user.clubId,
-      club_name: user.club?.name || null,
-      club_city: user.club?.city || null,
-      club_country: user.club?.country || null,
-      total_games: 0,
-      civ_win_rate: '0',
-      mafia_win_rate: '0',
-      sheriff_win_rate: '0',
-      don_win_rate: '0',
-      avg_additional_points: '0',
-      total_fouls: 0
-    } as UserWithStats));
-
+    // Get users with stats from API
+    const users = await api.get('/users/stats')
+    
     // Update cache
-    cachedUsers = transformedUsers;
+    cachedUsers = users;
     lastFetchTime = now;
 
-    return transformedUsers;
+    return users;
   } catch (error) {
     console.error('Error fetching users:', error);
-    // Return empty array instead of throwing to prevent page crashes
     return [];
   }
 }
 
 // Получение списка всех пользователей
 export async function getAllUsers({ clubId }: { clubId?: number } = {}) {
-  return await prismaOperation(
-    async () => {
-      const users = await prisma.user.findMany({
-        where: clubId ? { clubId } : {},
-        select: {
-          id: true, 
-          name: true, 
-          surname: true, 
-          nickname: true,
-          email: true,
-          image: true,
-          isTournamentJudge: true,
-          isSideJudge: true,
-          role: true,
-          country: true,
-          birthday: true,
-          gender: true,
-          clubId: true,
-          club: {
-            select: {
-              id: true,
-              name: true,
-              city: true,
-              country: true
-            }
-          }
-        },
-        orderBy: [
-          { name: 'asc' },
-          { surname: 'asc' }
-        ]
-      })
-
-      const formattedUsers = users.map(user => ({
-        id: user.id,
-        name: user.name,
-        surname: user.surname,
-        nickname: user.nickname,
-        email: user.email,
-        image: user.image,
-        is_tournament_judge: user.isTournamentJudge,
-        is_side_judge: user.isSideJudge,
-        role: user.role,
-        country: user.country,
-        birthday: user.birthday,
-        gender: user.gender,
-        club_id: user.clubId,
-        club_name: user.club?.name,
-        club_city: user.club?.city || null,
-        club_country: user.club?.country || null
-      }))
-
-      return { data: formattedUsers, status: 200 }
-    },
-    "Не удалось получить список пользователей"
-  )
+  try {
+    const endpoint = clubId ? `/users?clubId=${clubId}` : '/users'
+    const users = await api.get(endpoint)
+    return { data: users, status: 200 }
+  } catch (error) {
+    console.error("Не удалось получить список пользователей:", error)
+    return { data: [], status: 500 }
+  }
 }
 
 // Получение пользователя по ID
@@ -195,68 +96,18 @@ export async function getUserById(id: string) {
     return { error: "ID пользователя не указан", status: 400 }
   }
 
-  const userId = Number.parseInt(id, 10)
-  if (Number.isNaN(userId)) {
-    return { error: "Некорректный ID пользователя", status: 400 }
+  try {
+    const user = await api.get(`/users/${id}`)
+    
+    if (!user) {
+      return { error: "Пользователь не найден", status: 404 }
+    }
+
+    return { data: user, status: 200 }
+  } catch (error: any) {
+    console.error(`Не удалось получить данные пользователя (ID: ${id}):`, error)
+    return { error: error.message || "Не удалось получить данные пользователя", status: 500 }
   }
-
-  return await prismaOperation(
-    async () => {
-      const user = await prisma.user.findUnique({
-        where: { id: userId },
-        select: {
-          id: true,
-          name: true,
-          surname: true,
-          nickname: true,
-          email: true,
-          image: true,
-          bio: true,
-          country: true,
-          birthday: true,
-          gender: true,
-          isTournamentJudge: true,
-          isSideJudge: true,
-          role: true,
-          clubId: true,
-          createdAt: true,
-          updatedAt: true,
-          club: {
-            select: {
-              name: true
-            }
-          }
-        }
-      })
-
-      if (!user) {
-        return { error: "Пользователь не найден", status: 404 }
-      }
-
-      const formattedUser = {
-        id: user.id,
-        name: user.name,
-        surname: user.surname,
-        nickname: user.nickname,
-        email: user.email,
-        image: user.image,
-        bio: user.bio,
-        country: user.country,
-        birthday: user.birthday,
-        gender: user.gender,
-        is_tournament_judge: user.isTournamentJudge,
-        is_side_judge: user.isSideJudge,
-        role: user.role,
-        club_id: user.clubId,
-        club_name: user.club?.name,
-        created_at: user.createdAt,
-        updated_at: user.updatedAt
-      }
-
-      return { data: formattedUser, status: 200 }
-    },
-    `Не удалось получить данные пользователя (ID: ${id})`
-  )
 }
 
 // Создание нового пользователя
@@ -264,51 +115,12 @@ export async function createUser(userData: z.infer<typeof createUserSchema>) {
   try {
     const validatedData = createUserSchema.parse(userData)
 
-    return await prismaOperation(
-      async () => {
-        const existingUser = await prisma.user.findFirst({
-          where: {
-            OR: [
-              { nickname: validatedData.nickname },
-              { email: validatedData.email }
-            ]
-          }
-        })
+    const newUser = await api.post('/users', validatedData)
 
-        if (existingUser) {
-          return {
-            error: "Пользователь с таким никнеймом или email уже существует",
-            status: 400
-          }
-        }
+    revalidatePath('/users')
+    revalidatePath('/admin/users')
 
-        const newUser = await prisma.user.create({
-          data: {
-            name: validatedData.name,
-            surname: validatedData.surname,
-            nickname: validatedData.nickname,
-            email: validatedData.email,
-            password: validatedData.password,
-            image: validatedData.image,
-            bio: validatedData.bio,
-            role: validatedData.role,
-            country: validatedData.country,
-            clubId: validatedData.club_id,
-            birthday: validatedData.birthday ? new Date(validatedData.birthday) : undefined,
-            gender: validatedData.gender,
-            isTournamentJudge: validatedData.is_tournament_judge,
-            isSideJudge: validatedData.is_side_judge
-          },
-          select: { id: true }
-        })
-
-        revalidatePath('/users')
-        revalidatePath('/admin/users')
-
-        return { data: newUser, status: 201 }
-      },
-      "Не удалось создать пользователя"
-    )
+    return { data: newUser, status: 201 }
   } catch (error) {
     console.error("Ошибка при создании пользователя:", error)
     
@@ -335,77 +147,15 @@ export async function updateUser(id: string, userData: z.infer<typeof updateUser
       return { error: "ID пользователя не указан", status: 400 }
     }
 
-    const userId = Number.parseInt(id, 10)
-    if (Number.isNaN(userId)) {
-      return { error: "Некорректный ID пользователя", status: 400 }
-    }
-
     const validatedData = updateUserSchema.parse(userData)
 
-    return await prismaOperation(
-      async () => {
-        const existingUser = await prisma.user.findUnique({
-          where: { id: userId }
-        })
+    const result = await api.put(`/users/${id}`, validatedData)
 
-        if (!existingUser) {
-          return { error: "Пользователь не найден", status: 404 }
-        }
+    revalidatePath('/users')
+    revalidatePath(`/users/${id}`)
+    revalidatePath('/admin/users')
 
-        if (validatedData.nickname || validatedData.email) {
-          const conflictCheck = await prisma.user.findFirst({
-            where: {
-              OR: [
-                validatedData.nickname ? { nickname: validatedData.nickname } : {},
-                validatedData.email ? { email: validatedData.email } : {}
-              ],
-              NOT: { id: userId }
-            }
-          })
-          
-          if (conflictCheck) {
-            return {
-              error: "Пользователь с таким никнеймом или email уже существует",
-              status: 400
-            }
-          }
-        }
-
-        const updateData: Record<string, unknown> = {}
-        
-        if (validatedData.name !== undefined) updateData.name = validatedData.name
-        if (validatedData.surname !== undefined) updateData.surname = validatedData.surname
-        if (validatedData.nickname !== undefined) updateData.nickname = validatedData.nickname
-        if (validatedData.email !== undefined) updateData.email = validatedData.email
-        if (validatedData.password !== undefined) updateData.password = validatedData.password
-        if (validatedData.image !== undefined) updateData.image = validatedData.image
-        if (validatedData.bio !== undefined) updateData.bio = validatedData.bio
-        if (validatedData.role !== undefined) updateData.role = validatedData.role
-        if (validatedData.country !== undefined) updateData.country = validatedData.country
-        if (validatedData.club_id !== undefined) updateData.clubId = validatedData.club_id
-        if (validatedData.birthday !== undefined) updateData.birthday = validatedData.birthday ? new Date(validatedData.birthday) : null
-        if (validatedData.gender !== undefined) updateData.gender = validatedData.gender
-        if (validatedData.is_tournament_judge !== undefined) updateData.isTournamentJudge = validatedData.is_tournament_judge
-        if (validatedData.is_side_judge !== undefined) updateData.isSideJudge = validatedData.is_side_judge
-
-        if (Object.keys(updateData).length === 0) {
-          return { data: { id: userId }, status: 200 }
-        }
-        
-        const result = await prisma.user.update({
-          where: { id: userId },
-          data: updateData,
-          select: { id: true }
-        })
-
-        revalidatePath('/users')
-        revalidatePath(`/users/${id}`)
-        revalidatePath('/admin/users')
-
-        return { data: result, status: 200 }
-      },
-      `Не удалось обновить пользователя (ID: ${id})`
-    )
+    return { data: result, status: 200 }
   } catch (error) {
     console.error(`Ошибка при обновлении пользователя (ID: ${id}):`, error)
     
@@ -432,45 +182,16 @@ export async function deleteUser(id: string) {
       return { error: "ID пользователя не указан", status: 400 }
     }
 
-    const userId = Number.parseInt(id, 10)
-    if (Number.isNaN(userId)) {
-      return { error: "Некорректный ID пользователя", status: 400 }
-    }
+    await api.delete(`/users/${id}`)
 
-    return await prismaOperation(
-      async () => {
-        const existingUser = await prisma.user.findUnique({
-          where: { id: userId },
-          select: { id: true, role: true }
-        })
+    revalidatePath('/users')
+    revalidatePath('/admin/users')
 
-        if (!existingUser) {
-          return { error: "Пользователь не найден", status: 404 }
-        }
-
-        if (existingUser.role === 'admin') {
-          return { 
-            error: "Нельзя удалить пользователя с ролью администратора", 
-            status: 403 
-          }
-        }
-
-        await prisma.user.delete({
-          where: { id: userId }
-        })
-
-        revalidatePath('/users')
-        revalidatePath('/admin/users')
-
-        return { data: { id: userId, deleted: true }, status: 200 }
-      },
-      `Не удалось удалить пользователя (ID: ${id})`
-    )
-  } catch (error) {
+    return { data: { id, deleted: true }, status: 200 }
+  } catch (error: any) {
     console.error(`Ошибка при удалении пользователя (ID: ${id}):`, error)
     return {
-      error: "Не удалось удалить пользователя",
-      details: error instanceof Error ? error.message : "Неизвестная ошибка",
+      error: error.message || "Не удалось удалить пользователя",
       status: 500
     }
   }

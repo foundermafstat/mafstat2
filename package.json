@@ -1,0 +1,20 @@
+{
+  "name": "mafstat-monorepo",
+  "version": "1.0.0",
+  "description": "MafStat Client and Server",
+  "scripts": {
+    "dev": "concurrently -k -n \"CLIENT,SERVER\" -c \"cyan.bold,green.bold\" \"npm run start:client\" \"npm run start:server\"",
+    "start:client": "cd client && npm run dev",
+    "start:server": "cd server && npm run dev",
+    "build": "npm run build:client && npm run build:server",
+    "build:client": "cd client && npm run build",
+    "build:server": "cd server && npm run build",
+    "install:all": "npm install && cd client && npm install && cd ../server && npm install"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "concurrently": "^9.0.0"
+  }
+}

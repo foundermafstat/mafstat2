@@ -2,12 +2,10 @@ import NextAuth from "next-auth"
 import CredentialsProvider from "next-auth/providers/credentials"
 import GoogleProvider from "next-auth/providers/google"
 import GitHubProvider from "next-auth/providers/github"
-import { compare } from "bcryptjs"
-import { neon } from "@neondatabase/serverless"
 import type { DefaultSession } from "next-auth"
-import type { JWT } from "next-auth/jwt"
 import type { NextAuthOptions } from "next-auth"
 import { saveOAuthUser } from "./lib/services/oauth-service"
+import { api } from "./lib/api"
 
 // Расширение типов NextAuth для дополнительных полей
 declare module "next-auth" {
@@ -16,6 +14,7 @@ declare module "next-auth" {
     name: string
     email: string
     role: string
+    accessToken?: string
   }
   
   interface Session extends DefaultSession {
@@ -24,6 +23,7 @@ declare module "next-auth" {
       name: string
       email: string
       role: string
+      accessToken?: string
     } & DefaultSession["user"]
   }
 }
@@ -33,6 +33,7 @@ declare module "next-auth/jwt" {
   interface JWT {
     id?: string
     role?: string
+    accessToken?: string
   }
 }
 
@@ -55,46 +56,27 @@ export const authOptions: NextAuthOptions = {
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) {
-          console.log("Не предоставлены учетные данные")
           return null
         }
 
         try {
-          // Используем direct SQL query с помощью tagged template literals
-          const sql = neon(process.env.DATABASE_URL || "")
+          // Call the backend API to login
+          const response = await api.post('/auth/login', {
+            email: credentials.email,
+            password: credentials.password
+          });
 
-          // Найти пользователя по email
-          const users = await sql`
-            SELECT id, name, email, password, role
-            FROM users
-            WHERE email = ${credentials.email.toLowerCase()}
-          `
-
-          if (!users || users.length === 0) {
-            console.log("Пользователь не найден")
-            return null
+          if (response && response.user && response.accessToken) {
+            return {
+              id: response.user.id.toString(),
+              name: response.user.name || response.user.username || 'User',
+              email: response.user.email,
+              role: response.user.role || 'user',
+              accessToken: response.accessToken
+            }
           }
-
-          const user = users[0]
-          if (!user || !user.password) {
-            console.log("Пользователь не найден или нет пароля")
-            return null
-          }
-
-          // Проверка пароля
-          const passwordMatch = await compare(credentials.password, user.password)
-          if (!passwordMatch) {
-            console.log("Пароль не совпадает")
-            return null
-          }
-
-          console.log("Успешная авторизация для:", user.email)
-          return {
-            id: user.id.toString(),
-            name: user.name,
-            email: user.email,
-            role: user.role,
-          }
+          
+          return null
         } catch (error) {
           console.error("Ошибка аутентификации:", error)
           return null
@@ -111,14 +93,15 @@ export const authOptions: NextAuthOptions = {
       // Обрабатываем только OAuth провайдеры
       if (account?.provider && account.provider !== 'credentials' && user.email) {
         try {
-          // Сохраняем пользователя в базу данных и отправляем уведомление
+          // Сохраняем пользователя через API
           const oauthUser = await saveOAuthUser(
             {
               name: user.name || '',
               email: user.email,
               image: user.image || '',
             },
-            account.provider
+            account.provider,
+            account.providerAccountId
           );
           
           // Обновляем данные пользователя
@@ -128,7 +111,6 @@ export const authOptions: NextAuthOptions = {
           }
         } catch (error) {
           console.error('Ошибка при обработке OAuth входа:', error);
-          // Разрешаем вход даже при ошибке, чтобы не блокировать пользователя
         }
       }
       return true;
@@ -138,6 +120,7 @@ export const authOptions: NextAuthOptions = {
       if (user) {
         token.id = user.id
         token.role = user.role
+        token.accessToken = user.accessToken
       }
       return token
     },
@@ -146,6 +129,7 @@ export const authOptions: NextAuthOptions = {
       if (session.user && token) {
         session.user.id = token.id as string
         session.user.role = token.role as string
+        session.user.accessToken = token.accessToken as string
       }
       return session
     },

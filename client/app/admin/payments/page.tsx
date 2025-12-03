@@ -56,7 +56,7 @@ export default function PaymentsPage() {
         
         if (!response.ok) {
           console.error("Ошибка API:", data)
-          throw new Error(data.error || `Ошибка сервера: ${response.status}`)
+          throw new Error(data.error || data.details || `Ошибка сервера: ${response.status}`)
         }
         
         console.log("Получены данные о платежах:", data)
@@ -163,7 +163,7 @@ export default function PaymentsPage() {
           
           if (!response.ok) {
             console.error("Ошибка API:", data)
-            throw new Error(data.error || `Ошибка сервера: ${response.status}`)
+            throw new Error(data.error || data.details || `Ошибка сервера: ${response.status}`)
           }
           
           console.log("Получены данные о платежах:", data)

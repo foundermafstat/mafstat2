@@ -21,6 +21,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Calendar } from "@/components/ui/calendar"
 import { cn } from "@/lib/utils"
+import { api } from "@/lib/api"
 
 // Типы данных
 interface User {
@@ -34,8 +35,8 @@ interface User {
   nickname?: string
   country?: string
   clubId?: number | null
-  birthday?: Date | null
-  gender?: "male" | "female" | "other"
+  birthday?: string | Date | null
+  gender?: "male" | "female" | "other" | null
   isTournamentJudge?: boolean
   isSideJudge?: boolean
 }
@@ -80,11 +81,8 @@ export function ProfileForm({ user, refreshUserData }: ProfileFormProps) {
   useEffect(() => {
     async function fetchClubs() {
       try {
-        const response = await fetch('/api/clubs')
-        if (response.ok) {
-          const data = await response.json()
-          setClubs(data.clubs || [])
-        }
+        const response = await api.get('/clubs')
+        setClubs(response.data || [])
       } catch (error) {
         console.error('Ошибка при загрузке списка клубов:', error)
       }
@@ -106,7 +104,7 @@ export function ProfileForm({ user, refreshUserData }: ProfileFormProps) {
       country: user?.country || "",
       clubId: user?.clubId || null,
       birthday: user?.birthday ? new Date(user.birthday) : null,
-      gender: user?.gender as "male" | "female" | "other" || undefined,
+      gender: (user?.gender === "male" || user?.gender === "female" || user?.gender === "other") ? user.gender : undefined,
       isTournamentJudge: user?.isTournamentJudge || false,
       isSideJudge: user?.isSideJudge || false
     }
@@ -114,6 +112,8 @@ export function ProfileForm({ user, refreshUserData }: ProfileFormProps) {
 
   // Функция для обработки отправки формы
   async function onSubmit(data: ProfileFormValues) {
+    if (!user) return;
+    
     setIsLoading(true)
     
     try {
@@ -121,28 +121,18 @@ export function ProfileForm({ user, refreshUserData }: ProfileFormProps) {
       const formData = {
         ...data,
         // Преобразуем объект Date в строку ISO для правильной сериализации
-        birthday: data.birthday ? data.birthday.toISOString() : null
+        birthday: data.birthday ? data.birthday.toISOString() : null,
+        // Используем поле avatarUrl как image
+        image: data.avatarUrl
       }
       
-      const response = await fetch("/api/profile", {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify(formData)
-      })
+      // Удаляем avatarUrl из отправляемых данных, так как на сервере поле image
+      // @ts-ignore
+      delete formData.avatarUrl
       
-      if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.message || "Произошла ошибка при обновлении профиля")
-      }
-      
-      // Получаем обновленные данные пользователя
-      const result = await response.json()
-      console.log("Обновленные данные пользователя:", result)
-      
-      // Принудительно обновляем сессию
-      await fetch("/api/auth/session", { method: "GET" })
+      // Отправляем PUT запрос на сервер
+      // Вместо /api/profile используем RESTful endpoint пользователя
+      await api.put(`/users/${user.id}`, formData)
       
       toast.success("Профиль успешно обновлен")
       
@@ -150,7 +140,7 @@ export function ProfileForm({ user, refreshUserData }: ProfileFormProps) {
       if (refreshUserData) {
         refreshUserData()
       } else {
-        window.location.href = "/profile"
+        window.location.reload()
       }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Произошла ошибка")

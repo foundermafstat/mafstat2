@@ -11,7 +11,9 @@ import {
   CheckCircle,
   XCircle,
   MoreHorizontal,
-  Crown
+  Crown,
+  Search,
+  Filter
 } from "lucide-react"
 import { useRouter } from "next/navigation"
 
@@ -64,6 +66,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 
 // Импортируем серверные экшены
 import { getAllUsers, getUserById, updateUser, deleteUser } from "@/actions/admin"
+import { getAllClubs } from "@/actions/clubs"
 
 // Тип для пользователя из Prisma
 type User = {
@@ -71,7 +74,7 @@ type User = {
   name: string
   email: string
   role: string
-  emailVerified: string | null
+  emailVerified: Date | null
   createdAt: Date
   updatedAt: Date
   // Дополнительные поля игрока
@@ -94,9 +97,25 @@ type User = {
   } | null
 }
 
+// Тип для клуба
+type Club = {
+  id: number
+  name: string
+  description: string | null
+  url: string | null
+  country: string | null
+  city: string | null
+  federation_id: number | null
+  federation_name: string | null
+  player_count: number
+  game_count: number
+  created_at: Date
+  updated_at: Date
+}
+
 // Тип для формы редактирования пользователя
 type UserFormData = {
-  role: string
+  role: "user" | "admin" | "premium"
   name: string
   email: string
   nickname: string | null
@@ -110,11 +129,18 @@ type UserFormData = {
 
 export default function UsersPage() {
   const [users, setUsers] = useState<User[]>([])
+  const [allUsers, setAllUsers] = useState<User[]>([])
+  const [clubs, setClubs] = useState<Club[]>([])
   const [loading, setLoading] = useState(true)
   const [openDialog, setOpenDialog] = useState(false)
   const [editingUser, setEditingUser] = useState<User | null>(null)
   const [deleteUserId, setDeleteUserId] = useState<number | null>(null)
   const [openDeleteDialog, setOpenDeleteDialog] = useState(false)
+  
+  // Фильтры
+  const [searchTerm, setSearchTerm] = useState("")
+  const [selectedClub, setSelectedClub] = useState<string>("all")
+  
   const [formData, setFormData] = useState<UserFormData>({
     name: "",
     email: "",
@@ -140,7 +166,9 @@ export default function UsersPage() {
         throw new Error(result.error)
       }
       
-      setUsers(result.users || [])
+      const usersData = result.users || []
+      setAllUsers(usersData)
+      setUsers(usersData)
     } catch (error) {
       console.error('Ошибка:', error)
       toast({
@@ -153,8 +181,47 @@ export default function UsersPage() {
     }
   }
 
+  // Загрузка списка клубов
+  const fetchClubs = async () => {
+    try {
+      const result = await getAllClubs()
+      setClubs(result.data || [])
+    } catch (error) {
+      console.error('Ошибка загрузки клубов:', error)
+    }
+  }
+
+  // Фильтрация пользователей
+  const filterUsers = () => {
+    let filtered = allUsers
+
+    // Фильтр по поиску (имя или никнейм)
+    if (searchTerm.trim()) {
+      const searchLower = searchTerm.toLowerCase()
+      filtered = filtered.filter(user => 
+        user.name.toLowerCase().includes(searchLower) ||
+        (user.nickname && user.nickname.toLowerCase().includes(searchLower)) ||
+        (user.surname && user.surname.toLowerCase().includes(searchLower))
+      )
+    }
+
+    // Фильтр по клубу
+    if (selectedClub !== "all") {
+      const clubId = parseInt(selectedClub)
+      filtered = filtered.filter(user => user.clubId === clubId)
+    }
+
+    setUsers(filtered)
+  }
+
+  // Применение фильтров при изменении
+  useEffect(() => {
+    filterUsers()
+  }, [searchTerm, selectedClub, allUsers])
+
   useEffect(() => {
     fetchUsers()
+    fetchClubs()
   }, [])
 
   // Обработка изменения полей формы
@@ -169,7 +236,7 @@ export default function UsersPage() {
   }
 
   // Обработка изменения роли
-  const handleRoleChange = (value: string) => {
+  const handleRoleChange = (value: "user" | "admin" | "premium") => {
     setFormData(prev => ({ ...prev, role: value }))
   }
 
@@ -185,11 +252,15 @@ export default function UsersPage() {
       
       const user = result.user
       
-      setEditingUser(user)
+      if (!user) {
+        throw new Error("Пользователь не найден")
+      }
+      
+      setEditingUser(user as User)
       setFormData({
         name: user.name,
         email: user.email,
-        role: user.role,
+        role: user.role as "user" | "admin" | "premium",
         nickname: user.nickname,
         surname: user.surname,
         country: user.country,
@@ -306,6 +377,37 @@ export default function UsersPage() {
           </Button>
         </CardHeader>
         <CardContent>
+          {/* Фильтры */}
+          <div className="flex flex-col sm:flex-row gap-4 mb-6">
+            <div className="flex-1">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                <Input
+                  placeholder="Поиск по имени, фамилии или никнейму..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10"
+                />
+              </div>
+            </div>
+            <div className="sm:w-64">
+              <Select value={selectedClub} onValueChange={setSelectedClub}>
+                <SelectTrigger>
+                  <Filter className="w-4 h-4 mr-2" />
+                  <SelectValue placeholder="Все клубы" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Все клубы</SelectItem>
+                  {clubs.map((club) => (
+                    <SelectItem key={club.id} value={club.id.toString()}>
+                      {club.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
@@ -330,7 +432,7 @@ export default function UsersPage() {
                 ) : users.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={8} className="text-center py-8">
-                      Пользователи не найдены
+                      {searchTerm || selectedClub !== "all" ? "Пользователи не найдены по заданным критериям" : "Пользователи не найдены"}
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -344,7 +446,7 @@ export default function UsersPage() {
                       <TableCell>{user.email}</TableCell>
                       <TableCell>
                         {user.role === 'admin' ? (
-                          <Badge variant="destructive" className="flex items-center gap-1 font-medium">
+                          <Badge variant="destructive" className="flex items-center gap-1 font-medium bg-red-600 hover:bg-red-700 text-white shadow-lg">
                             <ShieldAlert className="w-3 h-3" />
                             Админ
                           </Badge>

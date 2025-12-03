@@ -14,6 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useState, useEffect } from 'react';
 import { PremiumSubscription } from '@/components/premium-subscription';
 import { PremiumPayment } from '@/components/premium-payment';
+import { api } from '@/lib/api';
 
 // Расширенный тип пользователя с полями игрока
 interface ExtendedUser {
@@ -55,14 +56,22 @@ export default function ProfilePage() {
 
 		try {
 			setIsUserDataLoading(true);
-			const response = await fetch('/api/user/current');
+			
+            // Используем api.get из @/lib/api
+            // Предполагаем, что эндпоинт на сервере - /api/auth/profile или /api/users/me
+            // В коде сервера есть endpoint /api/auth/profile (auth.routes.ts)
+            const user = await api.get('/auth/profile', {
+                headers: {
+                    // Передаем токен если он есть в сессии, но скорее всего он должен быть в куках или хедере
+                    // NextAuth обычно не передает access token на клиент в явном виде для внешних API, если не настроено
+                    // Но если мы используем прокси или токен в сессии:
+                    // Authorization: `Bearer ${session.user.accessToken}` 
+                    // В данном случае, вероятно, сервер ожидает токен в заголовке Authorization
+                }
+            });
 
-			if (!response.ok) {
-				throw new Error('Не удалось получить данные пользователя');
-			}
-
-			const data = await response.json();
-			setUserData(data.user);
+            // Если api.get бросает ошибку, она попадет в catch
+			setUserData(user);
 		} catch (error) {
 			console.error('Ошибка при получении данных пользователя:', error);
 		} finally {
@@ -73,6 +82,8 @@ export default function ProfilePage() {
 	// Загружаем актуальные данные при монтировании компонента
 	useEffect(() => {
 		if (session) {
+            // Если данные уже есть в сессии, сначала покажем их
+            setUserData(session.user);
 			fetchUserData();
 		}
 	}, [session]);

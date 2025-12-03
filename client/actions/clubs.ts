@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache"
 import { z } from "zod"
-import { prisma, prismaOperation } from "@/lib/prisma"
+import { api } from "@/lib/api"
 
 export type Club = {
   id: number
@@ -12,6 +12,15 @@ export type Club = {
   country: string | null
   city: string | null
   federation_id: number | null
+  federation_name: string | null
+  player_count: number
+  game_count: number
+  players: {
+    id: number
+    name: string
+    surname: string | null
+    nickname: string | null
+  }[]
   created_at: Date
   updated_at: Date
 }
@@ -35,57 +44,24 @@ let cachedClubs: Club[] | null = null;
 let lastClubsFetchTime = 0;
 
 // Получение списка всех клубов
-export async function getAllClubs(): Promise<Club[]> {
+export async function getAllClubs() {
   // Return cached data if it's still valid
   const now = Date.now();
   if (cachedClubs && (now - lastClubsFetchTime) < CLUBS_CACHE_TTL) {
-    return cachedClubs;
+    return { data: cachedClubs };
   }
 
   try {
-    const clubs = await prisma.club.findMany({
-      select: {
-        id: true,
-        name: true,
-        description: true,
-        url: true,
-        country: true,
-        city: true,
-        federationId: true,
-        createdAt: true,
-        updatedAt: true,
-        _count: {
-          select: {
-            users: true
-          }
-        }
-      },
-      orderBy: {
-        name: 'asc'
-      }
-    });
-
-    const result = clubs.map(club => ({
-      id: club.id,
-      name: club.name,
-      description: club.description,
-      url: club.url,
-      country: club.country,
-      city: club.city,
-      federation_id: club.federationId,
-      created_at: club.createdAt,
-      updated_at: club.updatedAt,
-      usersCount: club._count.users
-    }));
+    const clubs = await api.get('/clubs')
 
     // Update cache
-    cachedClubs = result;
+    cachedClubs = clubs;
     lastClubsFetchTime = now;
 
-    return result;
+    return { data: clubs };
   } catch (error) {
     console.error('Error fetching clubs:', error);
-    return [];
+    return { data: [] };
   }
 }
 
@@ -100,49 +76,17 @@ export async function getClubById(id: string) {
     return { error: "Некорректный ID клуба", status: 400 }
   }
 
-  return await prismaOperation(
-    async () => {
-      const club = await prisma.club.findUnique({
-        where: { id: clubId },
-        include: {
-          federation: {
-            select: {
-              name: true
-            }
-          },
-          users: {
-            select: { id: true }
-          },
-          games: {
-            select: { id: true }
-          }
-        }
-      })
+  try {
+    const club = await api.get(`/clubs/${clubId}`)
+    
+    if (!club) {
+      return { error: "Клуб не найден", status: 404 }
+    }
 
-      if (!club) {
-        return { error: "Клуб не найден", status: 404 }
-      }
-
-      // Преобразование данных в формат, ожидаемый фронтендом
-      const formattedClub = {
-        id: club.id,
-        name: club.name,
-        description: club.description,
-        url: club.url,
-        country: club.country,
-        city: club.city,
-        federation_id: club.federationId,
-        federation_name: club.federation?.name || null,
-        player_count: club.users.length,
-        game_count: club.games.length,
-        created_at: club.createdAt,
-        updated_at: club.updatedAt
-      }
-
-      return { data: formattedClub, status: 200 }
-    },
-    `Не удалось получить данные клуба (ID: ${id})`
-  )
+    return { data: club, status: 200 }
+  } catch (error: any) {
+    return { error: error.message || `Не удалось получить данные клуба (ID: ${id})`, status: 500 }
+  }
 }
 
 // Создание нового клуба
@@ -151,42 +95,14 @@ export async function createClub(clubData: z.infer<typeof createClubSchema>) {
     // Валидация данных
     const validatedData = createClubSchema.parse(clubData)
 
-    return await prismaOperation(
-      async () => {
-        // Проверка на уникальность названия
-        const existingClub = await prisma.club.findFirst({
-          where: { name: validatedData.name }
-        })
+    const newClub = await api.post('/clubs', validatedData)
 
-        if (existingClub) {
-          return {
-            error: "Клуб с таким названием уже существует",
-            status: 400
-          }
-        }
+    // Обновление кэша страниц
+    revalidatePath('/clubs')
+    revalidatePath('/admin/clubs')
 
-        // Создание нового клуба
-        const newClub = await prisma.club.create({
-          data: {
-            name: validatedData.name,
-            description: validatedData.description,
-            url: validatedData.url,
-            country: validatedData.country,
-            city: validatedData.city,
-            federationId: validatedData.federation_id
-          },
-          select: { id: true }
-        })
-
-        // Обновление кэша страниц
-        revalidatePath('/clubs')
-        revalidatePath('/admin/clubs')
-
-        return { data: newClub, status: 201 }
-      },
-      "Не удалось создать клуб"
-    )
-  } catch (error) {
+    return { data: newClub, status: 201 }
+  } catch (error: any) {
     console.error("Ошибка при создании клуба:", error)
     
     // Проверка на ошибку валидации
@@ -199,7 +115,7 @@ export async function createClub(clubData: z.infer<typeof createClubSchema>) {
     }
     
     return {
-      error: "Не удалось создать клуб",
+      error: error.message || "Не удалось создать клуб",
       details: error instanceof Error ? error.message : "Неизвестная ошибка",
       status: 500
     }
@@ -213,74 +129,18 @@ export async function updateClub(id: string, clubData: z.infer<typeof updateClub
       return { error: "ID клуба не указан", status: 400 }
     }
 
-    const clubId = Number.parseInt(id, 10)
-    if (Number.isNaN(clubId)) {
-      return { error: "Некорректный ID клуба", status: 400 }
-    }
-
     // Валидация данных
     const validatedData = updateClubSchema.parse(clubData)
 
-    return await prismaOperation(
-      async () => {
-        // Проверка существования клуба
-        const existingClub = await prisma.club.findUnique({
-          where: { id: clubId }
-        })
+    const result = await api.put(`/clubs/${id}`, validatedData)
 
-        if (!existingClub) {
-          return { error: "Клуб не найден", status: 404 }
-        }
+    // Обновление кэша страниц
+    revalidatePath('/clubs')
+    revalidatePath(`/clubs/${id}`)
+    revalidatePath('/admin/clubs')
 
-        // Проверка уникальности названия (если оно изменяется)
-        if (validatedData.name && validatedData.name !== existingClub.name) {
-          const nameConflict = await prisma.club.findFirst({
-            where: {
-              name: validatedData.name,
-              NOT: { id: clubId }
-            }
-          })
-          
-          if (nameConflict) {
-            return {
-              error: "Клуб с таким названием уже существует",
-              status: 400
-            }
-          }
-        }
-
-        // Подготовка данных для обновления
-        const updateData: Record<string, unknown> = {}
-        
-        if (validatedData.name !== undefined) updateData.name = validatedData.name
-        if (validatedData.description !== undefined) updateData.description = validatedData.description
-        if (validatedData.url !== undefined) updateData.url = validatedData.url
-        if (validatedData.country !== undefined) updateData.country = validatedData.country
-        if (validatedData.city !== undefined) updateData.city = validatedData.city
-        if (validatedData.federation_id !== undefined) updateData.federationId = validatedData.federation_id
-
-        // Если нет полей для обновления, возвращаем успех
-        if (Object.keys(updateData).length === 0) {
-          return { data: { id: clubId }, status: 200 }
-        }
-        
-        // Выполнение обновления
-        const result = await prisma.club.update({
-          where: { id: clubId },
-          data: updateData,
-          select: { id: true }
-        })
-
-        // Обновление кэша страниц
-        revalidatePath('/clubs')
-        revalidatePath(`/clubs/${id}`)
-        revalidatePath('/admin/clubs')
-
-        return { data: result, status: 200 }
-      },
-      `Не удалось обновить клуб (ID: ${id})`
-    )
-  } catch (error) {
+    return { data: result, status: 200 }
+  } catch (error: any) {
     console.error(`Ошибка при обновлении клуба (ID: ${id}):`, error)
     
     // Проверка на ошибку валидации
@@ -293,7 +153,7 @@ export async function updateClub(id: string, clubData: z.infer<typeof updateClub
     }
     
     return {
-      error: "Не удалось обновить клуб",
+      error: error.message || "Не удалось обновить клуб",
       details: error instanceof Error ? error.message : "Неизвестная ошибка",
       status: 500
     }
@@ -307,51 +167,17 @@ export async function deleteClub(id: string) {
       return { error: "ID клуба не указан", status: 400 }
     }
 
-    const clubId = Number.parseInt(id, 10)
-    if (Number.isNaN(clubId)) {
-      return { error: "Некорректный ID клуба", status: 400 }
-    }
+    await api.delete(`/clubs/${id}`)
 
-    return await prismaOperation(
-      async () => {
-        // Проверка существования клуба
-        const existingClub = await prisma.club.findUnique({
-          where: { id: clubId },
-          include: {
-            users: { select: { id: true } },
-            games: { select: { id: true } }
-          }
-        })
+    // Обновление кэша страниц
+    revalidatePath('/clubs')
+    revalidatePath('/admin/clubs')
 
-        if (!existingClub) {
-          return { error: "Клуб не найден", status: 404 }
-        }
-
-        // Проверка, есть ли связанные сущности
-        if (existingClub.users.length > 0 || existingClub.games.length > 0) {
-          return {
-            error: "Невозможно удалить клуб, так как с ним связаны пользователи или игры",
-            status: 400
-          }
-        }
-
-        // Выполнение удаления
-        await prisma.club.delete({
-          where: { id: clubId }
-        })
-
-        // Обновление кэша страниц
-        revalidatePath('/clubs')
-        revalidatePath('/admin/clubs')
-
-        return { data: { id: clubId, deleted: true }, status: 200 }
-      },
-      `Не удалось удалить клуб (ID: ${id})`
-    )
-  } catch (error) {
+    return { data: { id, deleted: true }, status: 200 }
+  } catch (error: any) {
     console.error(`Ошибка при удалении клуба (ID: ${id}):`, error)
     return {
-      error: "Не удалось удалить клуб",
+      error: error.message || "Не удалось удалить клуб",
       details: error instanceof Error ? error.message : "Неизвестная ошибка",
       status: 500
     }

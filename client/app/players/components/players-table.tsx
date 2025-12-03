@@ -192,7 +192,9 @@ export function PlayersTable({ initialPlayers, clubId }: PlayersTableProps) {
                     </div>
                   </TableCell>
                   <TableCell>
-                    {player.club_name}
+                    {player.club_name || (
+                      <span className="text-muted-foreground">Без клуба</span>
+                    )}
                   </TableCell>
                   <TableCell>
                     {player.country && (

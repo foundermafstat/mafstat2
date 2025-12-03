@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { register, login, refreshAccessToken, getProfile, logout } from '../controllers/user.controller';
+import { register, login, oauthLogin, refreshAccessToken, getProfile, logout } from '../controllers/user.controller';
 import { authenticate } from '../middlewares/auth.middleware';
 import { body } from 'express-validator';
 
@@ -21,6 +21,7 @@ const loginValidation = [
 // Маршруты аутентификации
 router.post('/register', registerValidation, register);
 router.post('/login', loginValidation, login);
+router.post('/oauth', oauthLogin);
 router.post('/refresh-token', refreshAccessToken);
 router.post('/logout', logout);
 router.get('/profile', authenticate, getProfile);

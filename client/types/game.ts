@@ -25,7 +25,15 @@ export interface Club {
   country: string | null
   city: string | null
   federation_id: number | null
-  federation_name?: string
+  federation_name?: string | null
+  player_count?: number
+  game_count?: number
+  players?: {
+    id: number
+    name: string
+    surname: string | null
+    nickname: string | null
+  }[]
   created_at: string
   updated_at: string
 }
@@ -61,7 +69,7 @@ export interface GamePlayer {
 	slot_number: any;
 	photo_url: undefined;
 	player_id: any;
-	additional_points: ReactNode;
+	additional_points: any;
   id: number
   gameId: number
   playerId: number

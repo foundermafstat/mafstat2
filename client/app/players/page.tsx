@@ -3,7 +3,7 @@
 import { Suspense, useCallback } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import { getUsersWithStats, type UserWithStats } from "@/actions/users"
-import { getClubs, type Club } from "@/actions/clubs"
+import { getAllClubs, type Club } from "@/actions/clubs"
 import { PlayersTable } from "./components/players-table"
 import { ClubFilter } from "./components/club-filter"
 import { Button } from "@/components/ui/button"
@@ -79,7 +79,8 @@ function PlayersPageClient({
 // This is a server component that fetches data
 async function PlayersPage() {
   const players = await getUsersWithStats()
-  const clubs = await getClubs()
+  const clubsResult = await getAllClubs()
+  const clubs = clubsResult.data || []
   
   return (
     <PlayersPageClient 
