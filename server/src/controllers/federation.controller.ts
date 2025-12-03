@@ -58,3 +58,18 @@ export const deleteFederation = async (req: Request, res: Response): Promise<voi
   }
 };
 
+export const getFederationPlayers = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const id = parseInt(req.params.id);
+    const players = await FederationService.getFederationPlayers(id);
+    if (players === null) {
+      res.status(404).json({ message: 'Федерация не найдена' });
+      return;
+    }
+    res.status(200).json(players);
+  } catch (error) {
+    console.error('Ошибка при получении игроков федерации:', error);
+    res.status(500).json({ message: 'Ошибка сервера при получении игроков федерации' });
+  }
+};
+

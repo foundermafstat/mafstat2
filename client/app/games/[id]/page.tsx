@@ -385,8 +385,8 @@ export default function GameDetailPage() {
 																			>
 																				{getRoleIcon(player.role)}
 																				<span className="ml-1">
-																					{player.role.charAt(0).toUpperCase() +
-																						player.role.slice(1)}
+																					{player.role ? (player.role.charAt(0).toUpperCase() +
+																						player.role.slice(1)) : 'Unknown'}
 																				</span>
 																			</Badge>
 																		</div>
@@ -495,8 +495,8 @@ export default function GameDetailPage() {
 																			>
 																				{getRoleIcon(player.role)}
 																				<span className="ml-1">
-																					{player.role.charAt(0).toUpperCase() +
-																						player.role.slice(1)}
+																					{player.role ? (player.role.charAt(0).toUpperCase() +
+																						player.role.slice(1)) : 'Unknown'}
 																				</span>
 																			</Badge>
 																		</div>
@@ -646,8 +646,8 @@ export default function GameDetailPage() {
 															<TableCell>
 																<div className="flex items-center">
 																	{getRoleIcon(player.role, 'h-4 w-4 mr-1')}
-																	{player.role.charAt(0).toUpperCase() +
-																		player.role.slice(1)}
+																	{player.role ? (player.role.charAt(0).toUpperCase() +
+																		player.role.slice(1)) : 'Unknown'}
 																</div>
 															</TableCell>
 															<TableCell>
@@ -703,7 +703,12 @@ export default function GameDetailPage() {
 									<Calendar className="h-5 w-5 text-muted-foreground mt-0.5" />
 									<div>
 										<div className="font-medium">Date</div>
-										<div>{format(new Date(game.created_at), 'PPP')}</div>
+										<div>
+											{game.created_at ? (() => {
+												const date = new Date(game.created_at)
+												return isNaN(date.getTime()) ? 'Не указано' : format(date, 'PPP')
+											})() : 'Не указано'}
+										</div>
 									</div>
 								</div>
 
@@ -711,7 +716,12 @@ export default function GameDetailPage() {
 									<Clock className="h-5 w-5 text-muted-foreground mt-0.5" />
 									<div>
 										<div className="font-medium">Time</div>
-										<div>{format(new Date(game.created_at), 'p')}</div>
+										<div>
+											{game.created_at ? (() => {
+												const date = new Date(game.created_at)
+												return isNaN(date.getTime()) ? 'Не указано' : format(date, 'p')
+											})() : 'Не указано'}
+										</div>
 									</div>
 								</div>
 
@@ -736,8 +746,8 @@ export default function GameDetailPage() {
 									<div>
 										<div className="font-medium">Game Type</div>
 										<div>
-											{game.game_type.charAt(0).toUpperCase() +
-												game.game_type.slice(1)}
+											{game.game_type ? (game.game_type.charAt(0).toUpperCase() +
+												game.game_type.slice(1)) : 'Unknown'}
 										</div>
 									</div>
 								</div>
@@ -754,8 +764,9 @@ export default function GameDetailPage() {
 														.split('_')
 														.map(
 															(word) =>
-																word.charAt(0).toUpperCase() + word.slice(1)
+																word ? (word.charAt(0).toUpperCase() + word.slice(1)) : ''
 														)
+														.filter(Boolean)
 														.join(' ')
 												: 'In progress'}
 										</div>
@@ -811,8 +822,8 @@ export default function GameDetailPage() {
 														</div>
 														<div className="flex-1 pb-8">
 															<div className="font-medium">
-																{stage.type.charAt(0).toUpperCase() +
-																	stage.type.slice(1)}{' '}
+																{stage.type ? (stage.type.charAt(0).toUpperCase() +
+																	stage.type.slice(1)) : 'Unknown'}{' '}
 																{Math.ceil(stage.order_number / 2)}
 															</div>
 															<div className="mt-2 p-3 bg-muted rounded-lg">

@@ -8,6 +8,7 @@ import { ClubSelect } from "./club-select"
 import { PlayerSelect } from "./player-select"
 import { FederationSelect } from "./federation-select" // Add this line
 import { useData } from "@/hooks/use-data"
+import { useAuth } from "@/hooks/use-auth"
 import type { GameState, GameType, Federation, Role } from "../types/game"
 import {
   AlertDialog,
@@ -39,6 +40,14 @@ export function GameSettings({ gameState, updateGameState }: GameSettingsProps) 
   const [gameDescription, setGameDescription] = useState(gameState.description || "")
   const { data, isLoading } = useData<Federation[]>("/api/federations")
   const [federations, setFederations] = useState<Federation[]>([])
+  const { session } = useAuth()
+
+  // Автоматически устанавливаем текущего пользователя как судью при создании новой игры
+  useEffect(() => {
+    if (session?.user?.id && !gameState.judge) {
+      updateGameState({ judge: session.user.id.toString() })
+    }
+  }, [session, gameState.judge, updateGameState])
 
   useEffect(() => {
     if (data) {
@@ -67,6 +76,7 @@ export function GameSettings({ gameState, updateGameState }: GameSettingsProps) 
         name: gameName,
         description: gameDescription,
         refereeComments,
+        judge: session?.user?.id?.toString() || gameState.judge, // Используем текущего пользователя как судью
       }
 
       console.log('Saving game data:', saveData);
@@ -254,13 +264,15 @@ export function GameSettings({ gameState, updateGameState }: GameSettingsProps) 
         <label htmlFor="judge" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
           Судья
         </label>
-        <PlayerSelect
-          value={gameState.judge}
-          onChange={(value) => updateGameState({ judge: value })}
-          filterJudges={true}
-          label="Выберите судью..."
-          placeholder="Поиск судьи..."
+        <Input
+          id="judge"
+          value={session?.user?.name ? `${session.user.name} ${session.user.surname || ''}`.trim() : 'Не авторизован'}
+          disabled
+          className="w-full bg-muted"
         />
+        <p className="text-xs text-muted-foreground mt-1">
+          Судья автоматически устанавливается как текущий авторизованный пользователь
+        </p>
       </div>
 
       <div>
@@ -277,6 +289,25 @@ export function GameSettings({ gameState, updateGameState }: GameSettingsProps) 
                 {type.charAt(0).toUpperCase() + type.slice(1)}
               </SelectItem>
             ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div>
+        <label htmlFor="result" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+          Результат игры
+        </label>
+        <Select 
+          value={gameState.result || ""} 
+          onValueChange={(value) => updateGameState({ result: value })}
+        >
+          <SelectTrigger className="w-full">
+            <SelectValue placeholder="Выберите результат" />
+          </SelectTrigger>
+          <SelectContent className="bg-popover">
+            <SelectItem value="mafia">Победа мафии</SelectItem>
+            <SelectItem value="civilians">Победа мирных</SelectItem>
+            <SelectItem value="draw">Ничья</SelectItem>
           </SelectContent>
         </Select>
       </div>

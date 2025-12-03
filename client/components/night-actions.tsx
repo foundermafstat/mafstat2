@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Plus } from "lucide-react"
 import type { GameState, NightAction } from "../types/game"
 
@@ -14,6 +15,7 @@ interface NightActionsProps {
 export function NightActions({ gameState, updateGameState }: NightActionsProps) {
   const [currentNight, setCurrentNight] = useState<NightAction>({
     mafiaShot: null,
+    mafiaMissed: [],
     donCheck: null,
     sheriffCheck: null,
   })
@@ -25,12 +27,33 @@ export function NightActions({ gameState, updateGameState }: NightActionsProps) 
     }))
   }
 
+  const handleMafiaMissedChange = (slotNumber: number, checked: boolean) => {
+    setCurrentNight((prev) => {
+      const missed = prev.mafiaMissed || []
+      if (checked) {
+        if (!missed.includes(slotNumber)) {
+          return {
+            ...prev,
+            mafiaMissed: [...missed, slotNumber],
+          }
+        }
+      } else {
+        return {
+          ...prev,
+          mafiaMissed: missed.filter((num) => num !== slotNumber),
+        }
+      }
+      return prev
+    })
+  }
+
   const handleAddNight = () => {
     updateGameState({
       nightActions: [...gameState.nightActions, currentNight],
     })
     setCurrentNight({
       mafiaShot: null,
+      mafiaMissed: [],
       donCheck: null,
       sheriffCheck: null,
     })
@@ -60,6 +83,42 @@ export function NightActions({ gameState, updateGameState }: NightActionsProps) 
             </SelectContent>
           </Select>
         </div>
+
+        {night.mafiaShot === null && (
+          <div>
+            <label className="text-sm font-medium mb-2 block">Мафия, которая промахнулась (мультивыбор):</label>
+            <div className="grid grid-cols-5 gap-2">
+              {Array.from({ length: 10 }, (_, index) => index + 1).map((num) => {
+                // Проверяем, является ли игрок мафией
+                const player = gameState.players.find((p) => p.slotNumber === num)
+                const isMafia = player && (player.role === 'mafia' || player.role === 'don')
+                
+                if (!isMafia) return null
+                
+                return (
+                  <div key={`mafia-missed-${num}`} className="flex items-center space-x-2">
+                    <Checkbox
+                      id={`mafia-missed-${num}`}
+                      checked={(night.mafiaMissed || []).includes(num)}
+                      onCheckedChange={(checked) => handleMafiaMissedChange(num, checked as boolean)}
+                    />
+                    <label
+                      htmlFor={`mafia-missed-${num}`}
+                      className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                    >
+                      {num}
+                    </label>
+                  </div>
+                )
+              })}
+            </div>
+            {(night.mafiaMissed || []).length > 0 && (
+              <p className="text-xs text-muted-foreground mt-1">
+                Промахнулись: {(night.mafiaMissed || []).sort((a, b) => a - b).join(", ")}
+              </p>
+            )}
+          </div>
+        )}
 
         <div>
           <label className="text-sm font-medium mb-1 block">Don Check (Slot Number)</label>

@@ -47,7 +47,7 @@ export class GameService {
 
   // Получение игры по ID
   static async getGameById(id: number) {
-    return prisma.game.findUnique({
+    const game = await prisma.game.findUnique({
       where: { id },
       include: {
         referee: {
@@ -93,6 +93,27 @@ export class GameService {
         },
       },
     });
+
+    if (!game) {
+      return null;
+    }
+
+    // Преобразуем даты в ISO строки для корректной передачи через API
+    return {
+      ...game,
+      createdAt: game.createdAt.toISOString(),
+      updatedAt: game.updatedAt.toISOString(),
+      gamePlayers: game.gamePlayers.map((gp) => ({
+        ...gp,
+        createdAt: gp.createdAt.toISOString(),
+        updatedAt: gp.updatedAt.toISOString(),
+      })),
+      gameStages: game.gameStages.map((gs) => ({
+        ...gs,
+        createdAt: gs.createdAt.toISOString(),
+        updatedAt: gs.updatedAt.toISOString(),
+      })),
+    };
   }
 
   // Создание игры

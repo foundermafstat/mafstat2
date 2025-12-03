@@ -140,7 +140,7 @@ export function PlayerSelect({
                     )}
                   />
                   {user.name} {user.surname}
-                  {user.nickname && <span className="ml-2 text-muted-foreground">({user.nickname})</span>}
+                  {user.nickname && user.nickname !== 'null' && <span className="ml-2 text-muted-foreground">({user.nickname})</span>}
                 </CommandItem>
               ))}
             </CommandGroup>

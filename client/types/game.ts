@@ -116,6 +116,7 @@ export interface Game {
 
 export interface NightAction {
   mafiaShot: number | null
+  mafiaMissed?: number[] // Массив номеров мафии, которые промахнулись
   donCheck: number | null
   sheriffCheck: number | null
 }

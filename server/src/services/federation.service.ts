@@ -48,8 +48,8 @@ export class FederationService {
         country: federation.country,
         city: federation.city,
         additionalPointsConditions: federation.additionalPointsConditions,
-        createdAt: federation.createdAt,
-        updatedAt: federation.updatedAt,
+        createdAt: federation.createdAt.toISOString(),
+        updatedAt: federation.updatedAt.toISOString(),
         club_count: federation._count.clubs,
         game_count: federation._count.games,
         player_count: uniquePlayerIds.size,
@@ -110,8 +110,8 @@ export class FederationService {
       country: federation.country,
       city: federation.city,
       additionalPointsConditions: federation.additionalPointsConditions,
-      createdAt: federation.createdAt,
-      updatedAt: federation.updatedAt,
+      createdAt: federation.createdAt.toISOString(),
+      updatedAt: federation.updatedAt.toISOString(),
       clubs: federation.clubs.map((fc) => ({
         id: fc.club.id,
         name: fc.club.name,
@@ -178,6 +178,96 @@ export class FederationService {
     return prisma.federation.delete({
       where: { id },
     });
+  }
+
+  // Получение игроков федерации со статистикой
+  static async getFederationPlayers(id: number) {
+    // Получаем все клубы федерации
+    const federation = await prisma.federation.findUnique({
+      where: { id },
+      include: {
+        clubs: {
+          include: {
+            club: {
+              include: {
+                users: {
+                  include: {
+                    gamePlayers: {
+                      include: {
+                        game: {
+                          select: {
+                            id: true,
+                            result: true,
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!federation) {
+      return null;
+    }
+
+    // Собираем всех уникальных игроков из всех клубов федерации
+    const playersMap = new Map<number, any>();
+
+    federation.clubs.forEach((fc) => {
+      fc.club.users.forEach((user) => {
+        if (!playersMap.has(user.id)) {
+          const games = user.gamePlayers || [];
+          const totalGames = games.length;
+          
+          // Подсчитываем победы
+          const civWins = games.filter(
+            (gp) => gp.role === 'civilian' && gp.game?.result === 'civilians'
+          ).length;
+          const mafiaWins = games.filter(
+            (gp) => gp.role === 'mafia' && gp.game?.result === 'mafia'
+          ).length;
+          const sheriffWins = games.filter(
+            (gp) => gp.role === 'sheriff' && gp.game?.result === 'civilians'
+          ).length;
+          const donWins = games.filter(
+            (gp) => gp.role === 'don' && gp.game?.result === 'mafia'
+          ).length;
+          
+          const totalWins = civWins + mafiaWins + sheriffWins + donWins;
+          const overallWinrate = totalGames > 0 ? Math.round((totalWins / totalGames) * 100) : 0;
+
+          playersMap.set(user.id, {
+            id: user.id,
+            name: user.name || null,
+            surname: user.surname || null,
+            nickname: user.nickname || null,
+            club_id: user.clubId || null,
+            club_name: fc.club.name || null,
+            country: user.country || null,
+            photo_url: user.image || user.photoUrl || null,
+            is_tournament_judge: user.isTournamentJudge,
+            is_side_judge: user.isSideJudge,
+            created_at: user.createdAt.toISOString(),
+            updated_at: user.updatedAt.toISOString(),
+            stats: {
+              total_games: totalGames,
+              total_wins: totalWins,
+              overall_winrate: overallWinrate,
+            },
+            total_games: totalGames,
+            total_wins: totalWins,
+            overall_winrate: overallWinrate,
+          });
+        }
+      });
+    });
+
+    return Array.from(playersMap.values());
   }
 }
 

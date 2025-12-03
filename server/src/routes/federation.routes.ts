@@ -5,6 +5,7 @@ import {
   createFederation,
   updateFederation,
   deleteFederation,
+  getFederationPlayers,
 } from '../controllers/federation.controller';
 import { authenticate } from '../middlewares/auth.middleware';
 
@@ -12,6 +13,7 @@ const router = Router();
 
 // Публичные маршруты
 router.get('/', getFederations);
+router.get('/:id/players', getFederationPlayers); // Должен быть перед /:id
 router.get('/:id', getFederation);
 
 // Защищенные маршруты (требуется аутентификация)

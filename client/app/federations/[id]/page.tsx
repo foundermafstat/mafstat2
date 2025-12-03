@@ -307,12 +307,16 @@ export default function FederationDetailPage() {
                             <Avatar>
                               <AvatarImage 
                                 src={player.photo_url || `/api/players/${player.id}/avatar`} 
-                                alt={`${player.name} ${player.surname}`} 
+                                alt={`${player.name || ''} ${player.surname || ''}`} 
                               />
-                              <AvatarFallback>{`${player.name.charAt(0)}${player.surname.charAt(0)}`}</AvatarFallback>
+                              <AvatarFallback>
+                                {`${player.name?.charAt(0) || ''}${player.surname?.charAt(0) || ''}` || '??'}
+                              </AvatarFallback>
                             </Avatar>
                             <div>
-                              <div className="font-medium">{player.name} {player.surname}</div>
+                              <div className="font-medium">
+                                {[player.name, player.surname].filter(Boolean).join(' ') || 'Игрок без имени'}
+                              </div>
                               {player.nickname && <div className="text-sm text-muted-foreground">@{player.nickname}</div>}
                               {player.club_name && <div className="text-xs text-muted-foreground">{player.club_name}</div>}
                               <div className="flex space-x-2 mt-1 text-xs text-muted-foreground">

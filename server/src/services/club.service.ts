@@ -78,6 +78,8 @@ export class ClubService {
             name: true,
             surname: true,
             nickname: true,
+            image: true,
+            photoUrl: true,
           },
         },
         _count: {
@@ -109,9 +111,10 @@ export class ClubService {
         name: user.name,
         surname: user.surname,
         nickname: user.nickname,
+        photo_url: user.image || user.photoUrl || null,
       })),
-      created_at: club.createdAt,
-      updated_at: club.updatedAt,
+      created_at: club.createdAt.toISOString(),
+      updated_at: club.updatedAt.toISOString(),
     };
   }
 
